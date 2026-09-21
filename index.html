@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaxFlow - GST Compliance SaaS</title>
+    <meta name="description" content="A comprehensive multi-tenant GST compliance dashboard featuring invoice management, reconciliation, return filing wizards, statutory GST rate calculator, and analytics." />
+    <meta property="og:title" content="TaxFlow - GST Compliance SaaS" />
+    <meta property="og:description" content="A comprehensive multi-tenant GST compliance dashboard featuring invoice management, reconciliation, return filing wizards, statutory GST rate calculator, and analytics." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+            },
+            colors: {
+              corporate: {
+                50: '#F8FAFC',
+                100: '#F1F5F9',
+                200: '#E2E8F0',
+                300: '#CBD5E1',
+                400: '#94A3B8',
+                500: '#64748B',
+                600: '#475569',
+                700: '#334155',
+                800: '#1E293B',
+                900: '#0F172A',
+                950: '#0B1120',
+              },
+              navy: {
+                50: '#f0f4f8',
+                100: '#d9e2ec',
+                200: '#bccadc',
+                300: '#9fb3c8',
+                400: '#829ab1',
+                500: '#627d98',
+                600: '#486581',
+                700: '#334e68',
+                800: '#243b53',
+                900: '#102a43',
+                950: '#081726',
+              },
+              brand: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                200: '#bfdbfe',
+                300: '#93c5fd',
+                400: '#60a5fa',
+                500: '#3b82f6',
+                600: '#2563eb',
+                700: '#1d4ed8',
+                800: '#1e40af',
+                900: '#1e3a8a',
+                950: '#172554',
+              }
+            },
+            boxShadow: {
+              'subtle': '0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02)',
+              'card': '0 2px 8px -2px rgba(15, 23, 42, 0.06), 0 1px 3px 0 rgba(15, 23, 42, 0.04)',
+              'elevation': '0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.03)',
+            }
+          },
+        },
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+        background-color: #F8FAFC;
+        color: #0F172A;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+      }
+      
+      /* Corporate Table Styling */
+      .table-corporate th {
+        background-color: #F1F5F9;
+        color: #334155;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.725rem;
+        letter-spacing: 0.05em;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #E2E8F0;
+      }
+      .table-corporate td {
+        padding: 0.875rem 1rem;
+        border-bottom: 1px solid #F1F5F9;
+        font-size: 0.875rem;
+      }
+      .table-corporate tr:hover td {
+        background-color: #F8FAFC;
+      }
+
+      /* Custom Scrollbar - Always Visible & Highly Responsive */
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: #94a3b8 #f1f5f9;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+        display: block !important;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f5f9; 
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+
+      /* Prominent Always-Visible Scrollbar */
+      .custom-scrollbar-visible {
+        overflow-x: auto !important;
+        scrollbar-width: auto !important;
+        scrollbar-color: #64748b #e2e8f0 !important;
+      }
+      .custom-scrollbar-visible::-webkit-scrollbar {
+        height: 8px !important;
+        width: 8px !important;
+        display: block !important;
+      }
+      .custom-scrollbar-visible::-webkit-scrollbar-track {
+        background: #f1f5f9 !important;
+        border-radius: 4px !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+      .custom-scrollbar-visible::-webkit-scrollbar-thumb {
+        background: #94a3b8 !important;
+        border-radius: 4px !important;
+      }
+      .custom-scrollbar-visible::-webkit-scrollbar-thumb:hover {
+        background: #64748b !important;
+      }
+
+      /* Corporate Background Grid */
+      .bg-grid-pattern {
+        background-image: radial-gradient(#cbd5e1 0.75px, transparent 0.75px);
+        background-size: 16px 16px;
+      }
+
+      /* Print Optimizations */
+      @media print {
+        .no-print,
+        nav,
+        aside,
+        .sidebar,
+        header:not(.print-header),
+        footer:not(.print-footer),
+        .action-bar,
+        .button-group,
+        button:not(.print-only),
+        .filter-section,
+        .tab-navigation,
+        .breadcrumb-container {
+          display: none !important;
+        }
+
+        body {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        #root {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .print-container,
+        #printable-invoices-register,
+        #printable-invoice-document {
+          display: block !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
+
+        .card, .bg-white {
+          box-shadow: none !important;
+        }
+
+        table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+        }
+        th, td {
+          border: 1px solid #cbd5e1 !important;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@tanstack/react-query": "https://esm.sh/@tanstack/react-query@^5.90.19",
+    "react-redux": "https://esm.sh/react-redux@^9.2.0",
+    "@reduxjs/toolkit": "https://esm.sh/@reduxjs/toolkit@^2.11.2"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

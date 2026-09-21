@@ -1,0 +1,10 @@
+{
+  "name": "TaxFlow - GST Compliance SaaS",
+  "description": "A comprehensive multi-tenant GST compliance dashboard featuring invoice management, reconciliation, return filing wizards, statutory GST rate calculator, and analytics.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

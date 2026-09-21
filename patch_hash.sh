@@ -1,0 +1,1 @@
+sed -i '176i\  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);\n  const [forceUpload, setForceUpload] = useState(false);\n  const [computedFileHash, setComputedFileHash] = useState<string | null>(null);' pages/DocumentVaultPage.tsx
