@@ -4,7 +4,7 @@
  * strict idempotency (zero duplicate IRNs on retries), and IRN cancellation workflows.
  */
 
-import { Invoice } from '../../types';
+import { Invoice } from '../../../types';
 import { ProductionGSPProvider, IRNResponse } from '../../../services/gsp/adapter';
 
 export interface EInvoiceFailureTestResult {
@@ -72,13 +72,15 @@ export class EInvoiceFailureRecoveryTestSuite {
         id: 'inv-idempotent-999',
         invoiceNumber: 'INV-2026-IDEM-01',
         date: '2026-06-01',
-        customerName: 'Tata Consultancy Services',
+        partyName: 'Tata Consultancy Services',
         gstin: '27AAACT2727Q1ZW',
+        placeOfSupply: '27',
         amount: 100000.00,
-        cgst: 9000.00,
-        sgst: 9000.00,
-        igst: 0,
-        total: 118000.00,
+        taxAmount: 18000.00,
+        taxDetails: { taxableValue: 100000.00, cgst: 9000.00, sgst: 9000.00, igst: 0, utgst: 0, cess: 0 },
+        type: 'B2B',
+        category: 'SALES',
+        docType: 'INVOICE',
         status: 'PENDING',
         items: [],
       };

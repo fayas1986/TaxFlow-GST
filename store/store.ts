@@ -1,3 +1,4 @@
+import { configureStore } from '@reduxjs/toolkit';
 import { User, Tenant, GstinRegistrationItem, BranchDetailsItem, UserRole } from '../types';
 import { useAuthStore } from '../src/stores/useAuthStore';
 import { useOrgStore } from '../src/stores/useOrgStore';
@@ -53,33 +54,25 @@ export const deleteBranch = (payload: { tenantId: string; branchId: string }) =>
   payload,
 });
 
-export function useSelector<T>(selector: (state: RootState) => T): T {
-  const authUser = useAuthStore((s) => s.user);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const selectedGstin = useOrgStore((s) => s.selectedGstin);
-  const selectedBranchId = useOrgStore((s) => s.selectedBranchId);
-  const gstinsByTenant = useOrgStore((s) => s.gstinsByTenant);
-  const branchesByTenant = useOrgStore((s) => s.branchesByTenant);
-
-  const state: RootState = {
+function syncZustandState(): RootState {
+  const authState = useAuthStore.getState();
+  const orgState = useOrgStore.getState();
+  return {
     auth: {
-      user: authUser,
-      isAuthenticated,
+      user: authState.user,
+      isAuthenticated: authState.isAuthenticated,
     },
     org: {
-      selectedGstin,
-      selectedBranchId,
-      gstinsByTenant,
-      branchesByTenant,
+      selectedGstin: orgState.selectedGstin,
+      selectedBranchId: orgState.selectedBranchId,
+      gstinsByTenant: orgState.gstinsByTenant,
+      branchesByTenant: orgState.branchesByTenant,
     },
   };
-
-  return selector(state);
 }
 
-export function useDispatch() {
-  return (action: { type: string; payload?: any }) => {
-    if (!action) return;
+function rootReducer(state: RootState = syncZustandState(), action: any): RootState {
+  if (action && action.type) {
     const authStore = useAuthStore.getState();
     const orgStore = useOrgStore.getState();
 
@@ -131,7 +124,31 @@ export function useDispatch() {
         orgStore.deleteBranch(action.payload.tenantId, action.payload.branchId);
         break;
     }
-  };
+  }
+  return syncZustandState();
 }
 
-export type AppDispatch = ReturnType<typeof useDispatch>;
+export const store = configureStore({
+  reducer: rootReducer,
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: false,
+    }),
+});
+
+useAuthStore.subscribe(() => {
+  store.dispatch({ type: '__ZUSTAND_SYNC__' });
+});
+useOrgStore.subscribe(() => {
+  store.dispatch({ type: '__ZUSTAND_SYNC__' });
+});
+
+export function useSelector<T>(selector: (state: RootState) => T): T {
+  return selector(syncZustandState());
+}
+
+export function useDispatch() {
+  return store.dispatch;
+}
+
+export type AppDispatch = typeof store.dispatch;

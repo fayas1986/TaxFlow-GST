@@ -158,14 +158,12 @@ export class TaxEngineModule {
     // Place of Supply vs Supplier State determines Inter-State (IGST) vs Intra-State (CGST+SGST)
     const isInterState = params.supplierStateCode !== params.placeOfSupplyStateCode;
 
-    const isRcm = params.isRcmTransaction !== undefined ? params.isRcmTransaction : !!rule.rcmApplicable;
+    const isRcm = params.isRcmTransaction ?? !!rule.rcmApplicable;
 
     let cgstAmount = 0;
     let sgstAmount = 0;
     let igstAmount = 0;
-    let cessAmount = params.cessAmountOverride !== undefined
-      ? params.cessAmountOverride
-      : (params.taxableAmount * (rule.cessPercent || 0)) / 100;
+    const cessAmount = params.cessAmountOverride ?? (params.taxableAmount * (rule.cessPercent ?? 0)) / 100;
 
     if (isInterState) {
       igstAmount = Number(((params.taxableAmount * rule.igstPercent) / 100).toFixed(2));
@@ -186,7 +184,7 @@ export class TaxEngineModule {
       cgstRate: isInterState ? 0 : rule.cgstPercent,
       sgstRate: isInterState ? 0 : rule.sgstPercent,
       igstRate: isInterState ? rule.igstPercent : 0,
-      cessRate: rule.cessPercent || 0,
+      cessRate: rule.cessPercent ?? 0,
       cgstAmount,
       sgstAmount,
       igstAmount,
@@ -204,9 +202,9 @@ export class TaxEngineModule {
   public static calculateRule42Reversal(input: Rule42_43ReversalInput): Rule42_43ReversalResult {
     // T = Total Input Tax
     // C1 = T - (T1 + T2 + T3) -> Tax credited to electronic credit ledger
-    const T1 = input.taxOnExemptSupplies || 0;
-    const T2 = input.taxOnNonBusinessInputs || 0;
-    const T3 = input.taxIneligibleUnderSection17_5 || 0;
+    const T1 = input.taxOnExemptSupplies ?? 0;
+    const T2 = input.taxOnNonBusinessInputs ?? 0;
+    const T3 = input.taxIneligibleUnderSection17_5 ?? 0;
 
     const commonCredit = Math.max(0, input.totalInputTax - (T1 + T2 + T3));
 

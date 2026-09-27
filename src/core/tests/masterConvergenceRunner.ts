@@ -19,20 +19,20 @@ export async function runMasterConvergenceSuite() {
 
   // 1. Multi-Tenant Isolation
   console.log('[1/7] Running Multi-Tenant Isolation & Anti-IDOR Test Suite...');
-  const isolationRes = await MultiTenantSecurityTestSuite.runAllTests();
+  const isolationRes: any = await MultiTenantSecurityTestSuite.runAllTests();
   const isolationTotal = isolationRes.totalTests || isolationRes.totalCount || 27;
   console.log(`      Result: ${isolationRes.passedCount}/${isolationTotal} passed (${isolationRes.allPassed ? 'SUCCESS' : 'FAILED'})`);
   if (!isolationRes.allPassed) {
-    isolationRes.results.filter(r => r.status !== 'PASSED').forEach(r => console.log(`      - FAIL: ${r.testName}: ${r.securityVerdict || r.actual}`));
+    isolationRes.results.filter((r: any) => r.status !== 'PASSED').forEach((r: any) => console.log(`      - FAIL: ${r.testName || r.name}: ${r.securityVerdict || r.actual}`));
   }
   console.log('');
 
   // 2. Server Auth & Tenant Middleware
   console.log('[2/7] Running Server Auth & Tenant Middleware Test Suite...');
-  const middlewareRes = await ServerTenantAuthMiddlewareTestSuite.runAllTests();
+  const middlewareRes: any = await ServerTenantAuthMiddlewareTestSuite.runAllTests();
   console.log(`      Result: ${middlewareRes.passedCount}/${middlewareRes.totalCount} passed (${middlewareRes.allPassed ? 'SUCCESS' : 'FAILED'})`);
   if (!middlewareRes.allPassed) {
-    middlewareRes.results.filter(r => !r.passed).forEach(r => console.log(`      - FAIL: ${r.testName}: ${r.details}`));
+    middlewareRes.results.filter((r: any) => !r.passed).forEach((r: any) => console.log(`      - FAIL: ${r.testName || r.name}: ${r.details || r.actual}`));
   }
   console.log('');
 

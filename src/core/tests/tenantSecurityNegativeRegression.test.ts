@@ -88,7 +88,7 @@ export class TenantSecurityNegativeRegressionTestSuite {
           {
             ctx: tenantContext,
             resourceOwnerTenantId: 't2-globex', // Resource belongs to t2!
-            requiredPermission: Permission.INVOICE_VIEW,
+            requiredPermission: Permission.INVOICE_READ,
             auditAction: 'INVOICE_VIEW',
             auditModule: 'Invoices',
           },
