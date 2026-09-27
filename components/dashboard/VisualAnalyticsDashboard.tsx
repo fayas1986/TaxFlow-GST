@@ -8,6 +8,9 @@ import {
   Percent, ArrowUpRight, ArrowDownRight, Info, MapPin, Globe
 } from 'lucide-react';
 import GeoGstMapVisualization from '../GeoGstMapVisualization';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store/store';
+import { useSubscriptionAccess } from '../../src/core/billing/SubscriptionManager';
 
 interface VisualAnalyticsDashboardProps {
   stats: any;
@@ -15,6 +18,8 @@ interface VisualAnalyticsDashboardProps {
 }
 
 const VisualAnalyticsDashboard: React.FC<VisualAnalyticsDashboardProps> = ({ stats, analytics }) => {
+  const user = useSelector((state: RootState) => state.auth.user);
+  const subProfile = useSubscriptionAccess(user?.role, user?.currentTenantId || 't1');
   const [revenueChartType, setRevenueChartType] = useState<'area' | 'line' | 'bar'>('area');
   const [activeSegment, setActiveSegment] = useState<number | null>(null);
 
@@ -352,10 +357,12 @@ const VisualAnalyticsDashboard: React.FC<VisualAnalyticsDashboardProps> = ({ sta
         </div>
       </div>
 
-      {/* D3 Geographical GST & Tax Liability Map Section */}
-      <div className="pt-4 border-t border-slate-200/60">
-        <GeoGstMapVisualization />
-      </div>
+      {/* D3 Geographical GST & Tax Liability Map Section (Multi-State / Advanced Analytics only) */}
+      {(subProfile.canMultiGstin || subProfile.canAdvancedAnalytics) && (
+        <div className="pt-4 border-t border-slate-200/60">
+          <GeoGstMapVisualization />
+        </div>
+      )}
 
     </div>
   );

@@ -3,6 +3,7 @@
 // Supporting Accountant Submissions, Finance Manager Reviews, Tax Head Escalations, and GSTN Portal Locks.
 
 import { UserRole } from '../types';
+import { safeStorage } from '../utils/safeStorage';
 
 export type ApprovalRequestType = 
   | 'GSTR1_FILING'
@@ -141,6 +142,21 @@ export const ROLE_APPROVAL_PERMISSIONS: Record<UserRole, RoleApprovalPermission>
     canAuditAndRemark: false,
     maxSingleSignoffAmount: 0,
     description: 'Read-only access for corporate board and management overview of tax liability pipelines and bottleneck analytics.'
+  },
+  [UserRole.CUSTOMER]: {
+    role: UserRole.CUSTOMER,
+    roleLabel: 'Customer / Client',
+    canDraft: false,
+    canApproveL1: false,
+    canApproveL2: false,
+    canRequestRevision: false,
+    canReject: false,
+    canEscalate: false,
+    canDispatchToGstn: false,
+    canModifyPolicy: false,
+    canAuditAndRemark: false,
+    maxSingleSignoffAmount: 0,
+    description: 'Client portal representative with access to personal document upload and sales invoices.'
   }
 };
 
@@ -522,9 +538,9 @@ const INITIAL_MOCK_REQUESTS: ApprovalRequest[] = [
 // Helper Functions
 export const loadApprovalRequests = (): ApprovalRequest[] => {
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const raw = safeStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_MOCK_REQUESTS));
+      safeStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_MOCK_REQUESTS));
       return INITIAL_MOCK_REQUESTS;
     }
     return JSON.parse(raw);
@@ -536,7 +552,7 @@ export const loadApprovalRequests = (): ApprovalRequest[] => {
 
 export const saveApprovalRequests = (requests: ApprovalRequest[]) => {
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(requests));
+    safeStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(requests));
   } catch (err) {
     console.error('Failed to save approval requests:', err);
   }
@@ -544,7 +560,7 @@ export const saveApprovalRequests = (requests: ApprovalRequest[]) => {
 
 export const loadPolicyConfig = (): ApprovalThresholdConfig => {
   try {
-    const raw = localStorage.getItem(POLICY_CONFIG_KEY);
+    const raw = safeStorage.getItem(POLICY_CONFIG_KEY);
     return raw ? JSON.parse(raw) : DEFAULT_APPROVAL_POLICY;
   } catch (err) {
     return DEFAULT_APPROVAL_POLICY;
@@ -553,7 +569,7 @@ export const loadPolicyConfig = (): ApprovalThresholdConfig => {
 
 export const savePolicyConfig = (config: ApprovalThresholdConfig) => {
   try {
-    localStorage.setItem(POLICY_CONFIG_KEY, JSON.stringify(config));
+    safeStorage.setItem(POLICY_CONFIG_KEY, JSON.stringify(config));
   } catch (err) {
     console.error('Failed to save approval policy config:', err);
   }
@@ -561,9 +577,9 @@ export const savePolicyConfig = (config: ApprovalThresholdConfig) => {
 
 export const loadDelegations = (): DelegationOfAuthority[] => {
   try {
-    const raw = localStorage.getItem(DELEGATIONS_KEY);
+    const raw = safeStorage.getItem(DELEGATIONS_KEY);
     if (!raw) {
-      localStorage.setItem(DELEGATIONS_KEY, JSON.stringify(INITIAL_MOCK_DELEGATIONS));
+      safeStorage.setItem(DELEGATIONS_KEY, JSON.stringify(INITIAL_MOCK_DELEGATIONS));
       return INITIAL_MOCK_DELEGATIONS;
     }
     return JSON.parse(raw);
@@ -574,7 +590,7 @@ export const loadDelegations = (): DelegationOfAuthority[] => {
 
 export const saveDelegations = (delegations: DelegationOfAuthority[]) => {
   try {
-    localStorage.setItem(DELEGATIONS_KEY, JSON.stringify(delegations));
+    safeStorage.setItem(DELEGATIONS_KEY, JSON.stringify(delegations));
   } catch (err) {
     console.error('Failed to save delegations:', err);
   }

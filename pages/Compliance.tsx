@@ -8,7 +8,7 @@ import {
   Bell, CalendarClock, AlertTriangle, ShieldAlert, Mail, MessageSquare, 
   CheckCircle2, AlertCircle, Clock, ChevronRight, Send, Laptop, RefreshCw,
   LayoutDashboard, Users, Scale, FileText, Activity, Search, Cpu, X,
-  ShieldCheck, Info, Sparkles, ExternalLink, ArrowRight, Archive
+  ShieldCheck, Info, Sparkles, ExternalLink, ArrowRight, Archive, History
 } from 'lucide-react';
 import { ComplianceAlert, NotificationSettings } from '../types';
 import { 
@@ -23,6 +23,7 @@ import { GstPolicyUpdatesWidget } from '../components/dashboard/GstPolicyUpdates
 import { ItcLedgerOptimizer } from '../components/ItcLedgerOptimizer';
 import { RegulatoryEventAudit } from '../components/RegulatoryEventAudit';
 import { RegulatoryAuditLog } from '../components/RegulatoryAuditLog';
+import { ComplianceAuditLog } from '../components/ComplianceAuditLog';
 import { VendorComplianceScorecard } from '../components/VendorComplianceScorecard';
 import { WhatsAppNotificationCenter } from '../components/WhatsAppNotificationCenter';
 import { ComplianceArchiveTimelineView } from '../components/ComplianceArchiveTimelineView';
@@ -34,7 +35,7 @@ const Compliance: React.FC = () => {
   const tenant = user?.availableTenants?.find(t => t.id === tenantId);
   const tenantName = tenant?.name || 'TaxFlow Enterprise Ltd.';
 
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'ARCHIVE' | 'WHATSAPP_REMINDERS' | 'ARCHITECTURE' | 'GSTIN_SEARCH' | 'VENDOR_RISK' | 'ITC_WATCHLIST' | 'REGULATORY_CHANGES' | 'REGULATORY_AUDIT' | 'REGULATORY_AUDIT_LOG' | 'NOTIFICATIONS'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'COMPLIANCE_AUDIT_LOG' | 'ARCHIVE' | 'WHATSAPP_REMINDERS' | 'ARCHITECTURE' | 'GSTIN_SEARCH' | 'VENDOR_RISK' | 'ITC_WATCHLIST' | 'REGULATORY_CHANGES' | 'REGULATORY_AUDIT' | 'REGULATORY_AUDIT_LOG' | 'NOTIFICATIONS'>('OVERVIEW');
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
   const [desktopEnabled, setDesktopEnabled] = useState(true);
@@ -158,7 +159,7 @@ const Compliance: React.FC = () => {
   const activeAlerts = (alerts || []).filter(a => !dismissedAlertIds.includes(a.id));
 
   interface TabItem {
-    key: 'OVERVIEW' | 'ARCHIVE' | 'WHATSAPP_REMINDERS' | 'ARCHITECTURE' | 'GSTIN_SEARCH' | 'VENDOR_RISK' | 'ITC_WATCHLIST' | 'REGULATORY_CHANGES' | 'REGULATORY_AUDIT' | 'REGULATORY_AUDIT_LOG' | 'NOTIFICATIONS';
+    key: 'OVERVIEW' | 'COMPLIANCE_AUDIT_LOG' | 'ARCHIVE' | 'WHATSAPP_REMINDERS' | 'ARCHITECTURE' | 'GSTIN_SEARCH' | 'VENDOR_RISK' | 'ITC_WATCHLIST' | 'REGULATORY_CHANGES' | 'REGULATORY_AUDIT' | 'REGULATORY_AUDIT_LOG' | 'NOTIFICATIONS';
     label: string;
     icon: React.ElementType;
     count?: number | string;
@@ -166,6 +167,7 @@ const Compliance: React.FC = () => {
 
   const tabs: TabItem[] = [
     { key: 'OVERVIEW', label: 'Overview', icon: LayoutDashboard, count: activeAlerts.length },
+    { key: 'COMPLIANCE_AUDIT_LOG', label: 'Compliance Audit Log', icon: History },
     { key: 'ARCHIVE', label: 'Statutory Archive', icon: Archive },
     { key: 'VENDOR_RISK', label: 'Vendor Risks', icon: Users, count: vendorRisks?.length },
     { key: 'ITC_WATCHLIST', label: 'ITC Watchlist', icon: Scale },
@@ -323,6 +325,12 @@ const Compliance: React.FC = () => {
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <GstPolicyUpdatesWidget />
           <RegulatoryChangeModule />
+        </div>
+      )}
+
+      {activeTab === 'COMPLIANCE_AUDIT_LOG' && (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <ComplianceAuditLog />
         </div>
       )}
 

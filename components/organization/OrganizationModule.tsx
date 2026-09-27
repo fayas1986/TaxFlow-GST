@@ -4,11 +4,13 @@ import {
   Plus, Edit2, Trash2, CheckCircle2, AlertCircle, Save, Key, Lock, 
   ExternalLink, Layers, RefreshCw, Check, Sparkles, Building, Briefcase, 
   Clock, ShieldAlert, Award, FileCheck, DollarSign, Settings, Users,
-  Activity, Eye, Radio, Zap, ChevronRight, X, Database
+  Activity, Eye, Radio, Zap, ChevronRight, X, Database, Crown, Sliders,
+  ShieldCheck, ToggleLeft, ToggleRight, SlidersHorizontal, Cpu, Coins,
+  SlidersVertical, CheckSquare, Square, ArrowUpRight
 } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
-import { useDispatch } from 'react-redux';
-import { setGstinsForTenant, setBranchesForTenant } from '../../store/store';
+import { useDispatch, useSelector } from 'react-redux';
+import { setGstinsForTenant, setBranchesForTenant, RootState } from '../../store/store';
 import { NeonMultiTenantDatabaseCenter } from './NeonMultiTenantDatabaseCenter';
 import { 
   CompanyRegistrationProfile, 
@@ -17,12 +19,27 @@ import {
   FinancialYearConfigItem, 
   StateConfigItem, 
   BusinessProfileDetailsItem, 
-  AuthorizedSignatoryItem 
+  AuthorizedSignatoryItem,
+  UserRole
 } from '../../types';
+import { tenantService } from '../../src/core/tenancy/tenantService';
+import { entitlementService } from '../../src/core/entitlements/entitlementService';
+import { PlanCode, PLANS_CATALOG, DEFAULT_PLANS_CATALOG, Feature, Plan, PlanLimits } from '../../src/core/entitlements/types';
+import { Tenant } from '../../src/core/tenancy/types';
+import { subscriptionManager } from '../../src/core/billing/SubscriptionManager';
+import { BillingService } from '../../src/core/billing';
+import { PlanGuard, InstantUpgradeModal, PLAN_DISPLAY_NAMES } from '../PlanGuard';
+import { BranchManagerModule } from '../BranchManagerModule';
+import { 
+  ENTERPRISE_GSTINS_BY_TENANT, 
+  ENTERPRISE_BRANCHES_BY_TENANT, 
+  ENTERPRISE_GROUP_TENANTS 
+} from '../../src/fixtures/enterpriseTenants';
 
 interface OrganizationModuleProps {
   currentTenantId?: string;
   onTenantSwitch?: (tenantId: string) => void;
+  onNavigate?: (path: string) => void;
 }
 
 interface Collaborator {
@@ -49,6 +66,7 @@ interface ActivityLogItem {
 }
 
 const PRESET_PERSONAS = [
+  { id: 'usr-0', name: 'Super Admin Core', role: 'SUPER_ADMIN / Platform Governance', color: 'bg-amber-600', avatar: 'SA' },
   { id: 'usr-1', name: 'Dr. Vikram Malhotra', role: 'CFO / Primary Signatory', color: 'bg-indigo-600', avatar: 'VM' },
   { id: 'usr-2', name: 'Anita Desai', role: 'Head of Tax & Compliance', color: 'bg-emerald-600', avatar: 'AD' },
   { id: 'usr-3', name: 'Priya Verma', role: 'Delhi Regional Lead', color: 'bg-amber-600', avatar: 'PV' },
@@ -57,12 +75,84 @@ const PRESET_PERSONAS = [
 
 export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
   currentTenantId = 't1',
-  onTenantSwitch
+  onTenantSwitch,
+  onNavigate
 }) => {
   const dispatch = useDispatch();
+  const currentUser = useSelector((state: RootState) => state.auth.user);
+  const isSuperAdmin = currentUser?.role === UserRole.SUPER_ADMIN;
+
+  const subProfile = subscriptionManager.getUserSubscriptionProfile(currentUser?.role, currentTenantId);
+  const [activeSubscription, setActiveSubscription] = useState(() => entitlementService.getSubscription(currentTenantId));
+  const isStarterOrSingleEntity = !isSuperAdmin && (subProfile.maxCompanies <= 1 || activeSubscription?.planId === PlanCode.STARTER);
+  const isStarterPlan = !isSuperAdmin && (activeSubscription?.planId === PlanCode.STARTER || subProfile.maxGstins <= 1);
+
   const [activeSubTab, setActiveSubTab] = useState<
-    'COMPANY' | 'GSTIN' | 'BRANCHES' | 'FY_SETTINGS' | 'STATE_CONFIG' | 'BUSINESS_PROFILE' | 'SIGNATORIES' | 'NEON_DATASETS'
-  >('COMPANY');
+    'COMPANY' | 'GSTIN' | 'BRANCHES' | 'FY_SETTINGS' | 'STATE_CONFIG' | 'BUSINESS_PROFILE' | 'SIGNATORIES' | 'NEON_DATASETS' | 'TENANTS' | 'SUPER_ADMIN'
+  >(() => (isSuperAdmin || (!isStarterOrSingleEntity && subProfile.maxCompanies > 1)) ? 'TENANTS' : 'COMPANY');
+
+  // Auto switch away from TENANTS tab if user is on Starter plan
+  useEffect(() => {
+    if (isStarterOrSingleEntity && activeSubTab === 'TENANTS') {
+      setActiveSubTab('COMPANY');
+    }
+  }, [isStarterOrSingleEntity, activeSubTab]);
+
+  // --- TENANT CREATION & PLAN ALIGNMENT STATE ---
+  const [allTenants, setAllTenants] = useState<Tenant[]>(() => tenantService.getAllTenants());
+  const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
+  
+  // Instant Upgrade Modal State for gated features and quota overruns
+  const [upgradeModalInfo, setUpgradeModalInfo] = useState<{
+    isOpen: boolean;
+    targetPlan: PlanCode;
+    targetPlanName: string;
+    featureTitle: string;
+    featureDesc?: string;
+    bullets?: string[];
+  }>({
+    isOpen: false,
+    targetPlan: PlanCode.BUSINESS,
+    targetPlanName: 'Business Growth',
+    featureTitle: 'Module Upgrade Required'
+  });
+
+  const [newTenantForm, setNewTenantForm] = useState({
+    legalName: '',
+    tradeName: '',
+    pan: '',
+    sector: 'General Commercial & Services',
+    stateCode: '27',
+    stateName: 'Maharashtra',
+    city: 'Mumbai',
+    subdomain: '',
+    planCode: PlanCode.BUSINESS,
+    billingCycle: 'MONTHLY' as 'MONTHLY' | 'ANNUAL'
+  });
+
+  // --- SUPER ADMIN: REAL-TIME PLAN & PRICING STUDIO STATE ---
+  const [plansCatalog, setPlansCatalog] = useState<Plan[]>(() => entitlementService.getAllPlans());
+  const [selectedPlanCode, setSelectedPlanCode] = useState<PlanCode>(PlanCode.BUSINESS);
+  const [planEditorForm, setPlanEditorForm] = useState<Plan>(() => {
+    const p = entitlementService.getPlan(PlanCode.BUSINESS) || PLANS_CATALOG[PlanCode.BUSINESS];
+    return JSON.parse(JSON.stringify(p));
+  });
+  const [isPlanDirty, setIsPlanDirty] = useState(false);
+
+  // Tenant-Specific Bespoke Override State
+  const [selectedTenantForCustom, setSelectedTenantForCustom] = useState<string>(currentTenantId);
+  const [tenantCustomForm, setTenantCustomForm] = useState(() => {
+    const sub = entitlementService.getSubscription(currentTenantId);
+    return {
+      planId: sub?.planId || PlanCode.BUSINESS,
+      customMonthlyPrice: sub?.customMonthlyPrice !== undefined ? sub.customMonthlyPrice : '',
+      customAnnualPrice: sub?.customAnnualPrice !== undefined ? sub.customAnnualPrice : '',
+      customPlanName: sub?.customPlanName || '',
+      customNotes: sub?.customNotes || '',
+      enabledFeatures: sub?.customFeatureOverrides?.enabledFeatures || [],
+      disabledFeatures: sub?.customFeatureOverrides?.disabledFeatures || []
+    };
+  });
 
   const [toastMsg, setToastMsg] = useState<{ text: string; type?: 'info' | 'success' | 'remote' } | null>(null);
 
@@ -74,81 +164,83 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
   // --- REALTIME SOCKET & COLLABORATION STATE ---
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [activeUser, setActiveUser] = useState(PRESET_PERSONAS[0]);
+  const [activeUser, setActiveUser] = useState(PRESET_PERSONAS[0]); // Default to Super Admin Core
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [remoteEditing, setRemoteEditing] = useState<{ user: any; section: string } | null>(null);
   const [showAuditDrawer, setShowAuditDrawer] = useState(false);
   const [activityLogs, setActivityLogs] = useState<ActivityLogItem[]>([
     {
       id: 'act-1',
-      user: 'System Admin',
-      action: 'Organization Workspace Initialized',
-      section: 'COMPANY',
+      user: 'Super Admin Core',
+      action: 'Super Admin Multi-Tenant Governance Ready',
+      section: 'SUPER_ADMIN',
       timestamp: new Date().toISOString(),
-      details: 'Real-time multi-entity synchronization active'
+      details: 'Real-time plan customization, dynamic price updates, and bespoke tenant packaging live'
     }
   ]);
 
+  // Helper to get initial company and scoped registrations
+  const initialTenantObj: any = tenantService.getTenant(currentTenantId) || ENTERPRISE_GROUP_TENANTS.find(t => t.id === currentTenantId);
+
   // --- 1. COMPANY REGISTRATION STATE ---
-  const [companyProfile, setCompanyProfile] = useState<CompanyRegistrationProfile>({
+  const [companyProfile, setCompanyProfile] = useState<CompanyRegistrationProfile>(() => ({
     id: currentTenantId,
-    legalName: 'Acme Technologies Private Limited',
-    tradeName: 'Acme Tech Solutions',
+    legalName: (initialTenantObj as any)?.legalName || initialTenantObj?.name || 'Acme Technologies Private Limited',
+    tradeName: (initialTenantObj as any)?.tradeName || initialTenantObj?.name || 'Acme Tech Solutions',
     entityType: 'PRIVATE_LIMITED',
     cinLLPin: 'U72200MH2018PTC312456',
     dateOfIncorporation: '2018-04-12',
-    pan: 'AAAAA0000A',
+    pan: (initialTenantObj as any)?.pan || (initialTenantObj?.gstin ? initialTenantObj.gstin.substring(2, 12) : 'AAAAA0000A'),
     tan: 'MUMB00000A',
-    registeredAddress: '101, Business Park, MIDC Andheri East, Mumbai, Maharashtra 400093',
+    registeredAddress: initialTenantObj?.address || '101, Business Park, MIDC Andheri East, Mumbai, Maharashtra 400093',
     corporateAddress: 'Floor 5, Tech Tower, BKC, Mumbai, Maharashtra 400051',
     contactEmail: 'tax.compliance@acmetech.com',
     contactPhone: '+91 98765 43210',
     website: 'https://acmetech.com',
     logoUrl: ''
+  }));
+
+  // --- 2. GSTIN MANAGEMENT STATE (Scoped strictly to plan quota) ---
+  const [gstinList, setGstinList] = useState<GstinRegistrationItem[]>(() => {
+    const raw = ENTERPRISE_GSTINS_BY_TENANT[currentTenantId] || [
+      {
+        id: 'g1',
+        gstin: initialTenantObj?.gstin || '27AAAAA0000A1Z5',
+        stateCode: initialTenantObj?.stateCode || '27',
+        stateName: initialTenantObj?.stateName || 'Maharashtra',
+        registrationType: 'REGULAR',
+        registrationDate: '2018-07-01',
+        status: 'ACTIVE',
+        filingFrequency: 'MONTHLY',
+        einvoicingStatus: 'ENABLED',
+        ewaybillStatus: 'ENABLED',
+        isPrimary: true
+      }
+    ];
+    const maxGstins = (!isSuperAdmin && (activeSubscription?.planId === PlanCode.STARTER || subProfile.maxGstins <= 1)) ? 1 : subProfile.maxGstins;
+    return isSuperAdmin ? raw : raw.slice(0, maxGstins);
   });
 
-  // --- 2. GSTIN MANAGEMENT STATE ---
-  const [gstinList, setGstinList] = useState<GstinRegistrationItem[]>([
-    {
-      id: 'g1',
-      gstin: '27AAAAA0000A1Z5',
-      stateCode: '27',
-      stateName: 'Maharashtra',
-      registrationType: 'REGULAR',
-      registrationDate: '2018-07-01',
-      status: 'ACTIVE',
-      filingFrequency: 'MONTHLY',
-      einvoicingStatus: 'ENABLED',
-      ewaybillStatus: 'ENABLED',
-      isPrimary: true
-    },
-    {
-      id: 'g2',
-      gstin: '07AAAAA0000A1Z2',
-      stateCode: '07',
-      stateName: 'Delhi',
-      registrationType: 'REGULAR',
-      registrationDate: '2019-10-15',
-      status: 'ACTIVE',
-      filingFrequency: 'MONTHLY',
-      einvoicingStatus: 'ENABLED',
-      ewaybillStatus: 'ENABLED',
-      isPrimary: false
-    },
-    {
-      id: 'g3',
-      gstin: '29AAAAA0000A1Z9',
-      stateCode: '29',
-      stateName: 'Karnataka',
-      registrationType: 'SEZ_UNIT',
-      registrationDate: '2021-03-20',
-      status: 'ACTIVE',
-      filingFrequency: 'MONTHLY',
-      einvoicingStatus: 'ENABLED',
-      ewaybillStatus: 'ENABLED',
-      isPrimary: false
-    }
-  ]);
+  // Keep GSTIN list aligned with plan quota
+  useEffect(() => {
+    const raw = ENTERPRISE_GSTINS_BY_TENANT[currentTenantId] || [
+      {
+        id: 'g1',
+        gstin: initialTenantObj?.gstin || '27AAAAA0000A1Z5',
+        stateCode: initialTenantObj?.stateCode || '27',
+        stateName: initialTenantObj?.stateName || 'Maharashtra',
+        registrationType: 'REGULAR',
+        registrationDate: '2018-07-01',
+        status: 'ACTIVE',
+        filingFrequency: 'MONTHLY',
+        einvoicingStatus: 'ENABLED',
+        ewaybillStatus: 'ENABLED',
+        isPrimary: true
+      }
+    ];
+    const maxGstins = (!isSuperAdmin && (activeSubscription?.planId === PlanCode.STARTER || subProfile.maxGstins <= 1)) ? 1 : subProfile.maxGstins;
+    setGstinList(isSuperAdmin ? raw : raw.slice(0, maxGstins));
+  }, [currentTenantId, activeSubscription?.planId, isSuperAdmin, subProfile.maxGstins]);
 
   const [showAddGstinModal, setShowAddGstinModal] = useState(false);
   const [newGstinForm, setNewGstinForm] = useState({
@@ -159,54 +251,27 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
     filingFrequency: 'MONTHLY'
   });
 
-  // --- 3. BRANCH MANAGEMENT STATE ---
-  const [branches, setBranches] = useState<BranchDetailsItem[]>([
-    {
-      id: 'b1',
-      name: 'Mumbai HQ Office',
-      code: 'MH-HQ-01',
-      type: 'HEAD_OFFICE',
-      address: '101 MIDC Andheri East, Mumbai, MH',
-      stateCode: '27',
-      stateName: 'Maharashtra',
-      gstin: '27AAAAA0000A1Z5',
-      contactPerson: 'Rajesh Sharma',
-      contactEmail: 'rajesh.sharma@acmetech.com',
-      contactPhone: '+91 98200 11223',
-      status: 'ACTIVE',
-      annualTurnoverContributionPct: 55
-    },
-    {
-      id: 'b2',
-      name: 'Delhi Regional Hub',
-      code: 'DL-RO-02',
-      type: 'REGIONAL_OFFICE',
-      address: 'Connaught Place, New Delhi, DL',
-      stateCode: '07',
-      stateName: 'Delhi',
-      gstin: '07AAAAA0000A1Z2',
-      contactPerson: 'Priya Verma',
-      contactEmail: 'priya.verma@acmetech.com',
-      contactPhone: '+91 98110 44556',
-      status: 'ACTIVE',
-      annualTurnoverContributionPct: 25
-    },
-    {
-      id: 'b3',
-      name: 'Bengaluru Tech Center (SEZ)',
-      code: 'KA-SEZ-03',
-      type: 'SEZ_UNIT',
-      address: 'Electronic City Phase 1, Bengaluru, KA',
-      stateCode: '29',
-      stateName: 'Karnataka',
-      gstin: '29AAAAA0000A1Z9',
-      contactPerson: 'Arun Kumar',
-      contactEmail: 'arun.kumar@acmetech.com',
-      contactPhone: '+91 98450 77889',
-      status: 'ACTIVE',
-      annualTurnoverContributionPct: 20
-    }
-  ]);
+  // --- 3. BRANCH MANAGEMENT STATE (Scoped strictly to plan quota) ---
+  const [branches, setBranches] = useState<BranchDetailsItem[]>(() => {
+    const raw = ENTERPRISE_BRANCHES_BY_TENANT[currentTenantId] || [
+      {
+        id: 'b1',
+        name: `${initialTenantObj?.name || 'Primary'} HQ Office`,
+        code: `${initialTenantObj?.stateCode || 'MH'}-HQ-01`,
+        type: 'HEAD_OFFICE',
+        address: initialTenantObj?.address || '101 MIDC Andheri East, Mumbai, MH',
+        stateCode: initialTenantObj?.stateCode || '27',
+        stateName: initialTenantObj?.stateName || 'Maharashtra',
+        gstin: initialTenantObj?.gstin || '27AAAAA0000A1Z5',
+        contactPerson: 'Rajesh Sharma',
+        contactEmail: 'rajesh.sharma@acmetech.com',
+        contactPhone: '+91 98200 11223',
+        status: 'ACTIVE',
+        annualTurnoverContributionPct: 100
+      }
+    ];
+    return isSuperAdmin ? raw : raw.slice(0, subProfile.maxBranches);
+  });
 
   const [showAddBranchModal, setShowAddBranchModal] = useState(false);
   const [newBranchForm, setNewBranchForm] = useState({
@@ -398,10 +463,84 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
       triggerToast(`⚡ ${user?.name || 'Teammate'} updated ${section} in real time!`, 'remote');
     });
 
+    // --- SUPER ADMIN REALTIME LISTENERS ---
+    socket.on('plans-catalog-updated', (data: { plans: Plan[]; updatedPlanCode?: PlanCode; updatedPlan?: Plan; updatedBy?: string; action?: string }) => {
+      if (data?.plans) {
+        setPlansCatalog(data.plans);
+        const currentSelected = data.plans.find(p => p.code === selectedPlanCode);
+        if (currentSelected && !isPlanDirty) {
+          setPlanEditorForm(JSON.parse(JSON.stringify(currentSelected)));
+        }
+      }
+      triggerToast(`⚡ Plan catalog synced in real-time by ${data.updatedBy || 'Super Admin'}`, 'remote');
+    });
+
+    socket.on('tenant-subscription-updated', (data: { tenantId: string; subscription: any; entitlements: Feature[]; updatedBy?: string }) => {
+      if (data.tenantId === currentTenantId) {
+        setActiveSubscription(data.subscription);
+      }
+      if (data.tenantId === selectedTenantForCustom) {
+        setTenantCustomForm({
+          planId: data.subscription.planId,
+          customMonthlyPrice: data.subscription.customMonthlyPrice !== undefined ? data.subscription.customMonthlyPrice : '',
+          customAnnualPrice: data.subscription.customAnnualPrice !== undefined ? data.subscription.customAnnualPrice : '',
+          customPlanName: data.subscription.customPlanName || '',
+          customNotes: data.subscription.customNotes || '',
+          enabledFeatures: data.subscription.customFeatureOverrides?.enabledFeatures || [],
+          disabledFeatures: data.subscription.customFeatureOverrides?.disabledFeatures || []
+        });
+      }
+      triggerToast(`⚡ Tenant ${data.tenantId} customized entitlements applied live!`, 'remote');
+    });
+
+    socket.on('tenant-created', (data: { tenant: Tenant; subscription: any; creator?: string }) => {
+      setAllTenants(tenantService.getAllTenants());
+      triggerToast(`🏢 New organization "${data.tenant.legalName}" provisioned live by ${data.creator || 'Super Admin'}!`, 'remote');
+    });
+
+    socket.on('tenants-list-updated', (data: { tenants: Tenant[] }) => {
+      if (data?.tenants) {
+        setAllTenants(data.tenants);
+      }
+    });
+
+    socket.on('superadmin-audit-log', (log: ActivityLogItem) => {
+      setActivityLogs(prev => [log, ...prev].slice(0, 50));
+    });
+
+    socket.on('superadmin-error', (err: { message: string }) => {
+      triggerToast(`⚠️ Super Admin Error: ${err.message}`, 'info');
+    });
+
     return () => {
       socket.disconnect();
     };
-  }, [currentTenantId]);
+  }, [currentTenantId, selectedPlanCode, selectedTenantForCustom, isPlanDirty]);
+
+  // Sync plan editor when selectedPlanCode changes
+  useEffect(() => {
+    const p = plansCatalog.find(plan => plan.code === selectedPlanCode) || entitlementService.getPlan(selectedPlanCode);
+    if (p) {
+      setPlanEditorForm(JSON.parse(JSON.stringify(p)));
+      setIsPlanDirty(false);
+    }
+  }, [selectedPlanCode, plansCatalog]);
+
+  // Sync tenant custom overrides form when selectedTenantForCustom changes
+  useEffect(() => {
+    const sub = entitlementService.getSubscription(selectedTenantForCustom);
+    if (sub) {
+      setTenantCustomForm({
+        planId: sub.planId,
+        customMonthlyPrice: sub.customMonthlyPrice !== undefined ? sub.customMonthlyPrice : '',
+        customAnnualPrice: sub.customAnnualPrice !== undefined ? sub.customAnnualPrice : '',
+        customPlanName: sub.customPlanName || '',
+        customNotes: sub.customNotes || '',
+        enabledFeatures: sub.customFeatureOverrides?.enabledFeatures || [],
+        disabledFeatures: sub.customFeatureOverrides?.disabledFeatures || []
+      });
+    }
+  }, [selectedTenantForCustom]);
 
   // Handle identity / persona changes
   const handlePersonaSwitch = (persona: typeof PRESET_PERSONAS[0]) => {
@@ -596,6 +735,307 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
     syncSection('signatories', updated, `Set "${target?.name}" as primary authorized signatory`);
   };
 
+  // Synchronize when currentTenantId or subscription changes
+  useEffect(() => {
+    const tenants = tenantService.getAllTenants();
+    setAllTenants(tenants);
+    const sub = entitlementService.getSubscription(currentTenantId);
+    setActiveSubscription(sub);
+
+    const profile = subscriptionManager.getUserSubscriptionProfile(currentUser?.role, currentTenantId);
+
+    const t: any = tenantService.getTenant(currentTenantId) || ENTERPRISE_GROUP_TENANTS.find(item => item.id === currentTenantId);
+    if (t) {
+      setCompanyProfile(prev => ({
+        ...prev,
+        id: t.id,
+        legalName: (t as any).legalName || t.name,
+        tradeName: (t as any).tradeName || t.name || (t as any).legalName,
+        pan: (t as any).pan || (t.gstin ? t.gstin.substring(2, 12) : prev.pan),
+        registeredAddress: t.address || prev.registeredAddress
+      }));
+    }
+
+    // Refresh scoped GSTINs and Branches
+    const rawGstins: GstinRegistrationItem[] = ENTERPRISE_GSTINS_BY_TENANT[currentTenantId] || [
+      {
+        id: 'g1',
+        gstin: t?.gstin || '27AAAAA0000A1Z5',
+        stateCode: t?.stateCode || '27',
+        stateName: t?.stateName || 'Maharashtra',
+        registrationType: 'REGULAR',
+        registrationDate: '2018-07-01',
+        status: 'ACTIVE',
+        filingFrequency: 'MONTHLY',
+        einvoicingStatus: 'ENABLED',
+        ewaybillStatus: 'ENABLED',
+        isPrimary: true
+      }
+    ];
+
+    const rawBranches: BranchDetailsItem[] = ENTERPRISE_BRANCHES_BY_TENANT[currentTenantId] || [
+      {
+        id: 'b1',
+        name: `${t?.name || 'Primary'} HQ Office`,
+        code: `${t?.stateCode || 'MH'}-HQ-01`,
+        type: 'HEAD_OFFICE',
+        address: t?.address || '101 MIDC Andheri East, Mumbai, MH',
+        stateCode: t?.stateCode || '27',
+        stateName: t?.stateName || 'Maharashtra',
+        gstin: t?.gstin || '27AAAAA0000A1Z5',
+        contactPerson: 'Rajesh Sharma',
+        contactEmail: 'rajesh.sharma@acmetech.com',
+        contactPhone: '+91 98200 11223',
+        status: 'ACTIVE',
+        annualTurnoverContributionPct: 100
+      }
+    ];
+
+    const scopedGstins = isSuperAdmin ? rawGstins : rawGstins.slice(0, profile.maxGstins);
+    const scopedBranches = isSuperAdmin ? rawBranches : rawBranches.slice(0, profile.maxBranches);
+
+    setGstinList(scopedGstins);
+    setBranches(scopedBranches);
+    dispatch(setGstinsForTenant({ tenantId: currentTenantId, gstins: scopedGstins }));
+    dispatch(setBranchesForTenant({ tenantId: currentTenantId, branches: scopedBranches }));
+  }, [currentTenantId, isSuperAdmin, activeSubscription?.planId]);
+
+  const handleCreateTenant = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTenantForm.legalName.trim()) {
+      triggerToast('Organization legal name is required', 'info');
+      return;
+    }
+    const cleanPan = newTenantForm.pan.trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+      triggerToast('Invalid PAN format! Must be 10 characters (5 letters, 4 digits, 1 letter)', 'info');
+      return;
+    }
+
+    try {
+      const result = tenantService.createTenant({
+        legalName: newTenantForm.legalName.trim(),
+        tradeName: newTenantForm.tradeName.trim() || newTenantForm.legalName.trim(),
+        pan: cleanPan,
+        sector: newTenantForm.sector,
+        stateCode: newTenantForm.stateCode,
+        stateName: stateNames[newTenantForm.stateCode] || 'State ' + newTenantForm.stateCode,
+        city: newTenantForm.city,
+        subdomain: newTenantForm.subdomain,
+        planCode: newTenantForm.planCode,
+        billingCycle: newTenantForm.billingCycle,
+        creatorUserId: 'u-fayas',
+        creatorEmail: 'fayasamd@gmail.com',
+        creatorName: 'Fayas M'
+      });
+
+      const updatedTenants = tenantService.getAllTenants();
+      setAllTenants(updatedTenants);
+      setShowCreateTenantModal(false);
+
+      // Reset form
+      setNewTenantForm({
+        legalName: '',
+        tradeName: '',
+        pan: '',
+        sector: 'General Commercial & Services',
+        stateCode: '27',
+        stateName: 'Maharashtra',
+        city: 'Mumbai',
+        subdomain: '',
+        planCode: PlanCode.BUSINESS,
+        billingCycle: 'MONTHLY'
+      });
+
+      triggerToast(`Provisioned organization "${result.tenant.legalName}" under ${newTenantForm.planCode} plan!`, 'success');
+
+      if (onTenantSwitch) {
+        onTenantSwitch(result.tenant.id);
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to create organization', 'info');
+    }
+  };
+
+  const handleUpgradePlan = (tenantId: string, newPlanCode: PlanCode) => {
+    try {
+      entitlementService.updateSubscriptionPlan(tenantId, newPlanCode);
+      BillingService.setPlan(tenantId, newPlanCode);
+      setAllTenants([...tenantService.getAllTenants()]);
+      const updatedSub = entitlementService.getSubscription(tenantId);
+      if (tenantId === currentTenantId) {
+        setActiveSubscription(updatedSub);
+      }
+      window.dispatchEvent(new CustomEvent('taxflow:subscription_updated', {
+        detail: { tenantId, planCode: newPlanCode }
+      }));
+      triggerToast(`Plan successfully updated to ${newPlanCode}!`, 'success');
+    } catch (err: any) {
+      triggerToast(err.message || 'Plan update failed', 'info');
+    }
+  };
+
+  const ALL_SYSTEM_FEATURES = [
+    { feature: Feature.INVOICES, label: 'Sales Invoicing & Billing', category: 'Core Operations', desc: 'Creation, numbering, validation, PDF dispatch & ledger posting' },
+    { feature: Feature.PURCHASES, label: 'Vendor Purchases & Inward Bills', category: 'Core Operations', desc: 'Purchase register, 3-way matching & expense tracking' },
+    { feature: Feature.E_WAY_BILL, label: 'NIC E-Way Bill Generation', category: 'Logistics', desc: 'Direct NIC portal integration, Part-A/B updates & vehicle tracking' },
+    { feature: Feature.GST_RETURNS, label: 'GSTR-1, 2B, 3B Returns & Filing', category: 'Tax Engine', desc: 'Monthly/quarterly summary generation & JSON return export' },
+    { feature: Feature.RECONCILIATION, label: '2B vs Purchase Auto-Reconciliation', category: 'Compliance', desc: 'Smart 5-way matching engine with configurable tolerance rules' },
+    { feature: Feature.ITC, label: 'Input Tax Credit (ITC) Optimizer', category: 'Tax Engine', desc: 'Rule 37/42/43 reversal calculations & ledger tracking' },
+    { feature: Feature.E_INVOICE, label: 'NIC E-Invoicing IRN & QR Code', category: 'Compliance', desc: 'Mandatory B2B e-invoice generation with digital signature' },
+    { feature: Feature.MULTI_GSTIN, label: 'Multi-State GSTIN Management', category: 'Enterprise', desc: 'Consolidated multi-state reporting and branch filtering' },
+    { feature: Feature.MULTI_BRANCH, label: 'Multi-Branch & SEZ Regional Hierarchy', category: 'Enterprise', desc: 'Sub-branch isolation, SEZ zero-rated supplies & unit codes' },
+    { feature: Feature.AUTOMATION, label: 'GST Rules & Workflow Automation', category: 'Intelligence', desc: 'Custom triggers, auto-reminders and compliance approval flows' },
+    { feature: Feature.AI, label: 'Gemini AI Tax Copilot & Anomaly Detector', category: 'AI Innovation', desc: 'Intelligent HSN classification & tax risk anomaly scoring' },
+    { feature: Feature.ERP_INTEGRATION, label: 'SAP / Oracle / Tally ERP Connector', category: 'Integration', desc: 'Bi-directional ERP sync & webhook data pipeline' },
+    { feature: Feature.API, label: 'Developer API Access & Tokens', category: 'Developer', desc: 'High-throughput REST API for headless integrations' },
+    { feature: Feature.WEBHOOKS, label: 'Real-time Event Webhooks', category: 'Developer', desc: 'Outbound webhook notifications on compliance events' },
+    { feature: Feature.ADVANCED_RBAC, label: 'Granular RBAC & Security Audit Logs', category: 'Security', desc: 'Custom roles, immutable audit trail & IP restrictions' }
+  ];
+
+  const handleSavePlanToCatalog = async () => {
+    try {
+      const updates = {
+        name: planEditorForm.name,
+        description: planEditorForm.description,
+        monthlyPriceInr: Number(planEditorForm.monthlyPriceInr),
+        annualPriceInr: Number(planEditorForm.annualPriceInr),
+        features: planEditorForm.features,
+        limits: planEditorForm.limits
+      };
+
+      // 1. Emit realtime WebSocket broadcast
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('superadmin-update-plan', {
+          planCode: selectedPlanCode,
+          updates,
+          user: activeUser
+        });
+      }
+
+      // 2. Call backend REST endpoint
+      try {
+        await fetch(`/api/v1/admin/plans/${selectedPlanCode}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-name': activeUser.name
+          },
+          body: JSON.stringify(updates)
+        });
+      } catch (e) {
+        // Local fallback
+      }
+
+      entitlementService.updatePlan(selectedPlanCode, updates);
+      setPlansCatalog(entitlementService.getAllPlans());
+      setIsPlanDirty(false);
+      triggerToast(`Plan "${planEditorForm.name}" updated & broadcasted live!`, 'success');
+    } catch (err: any) {
+      triggerToast(`Plan update failed: ${err.message}`, 'info');
+    }
+  };
+
+  const handleResetPlansCatalog = async () => {
+    if (!window.confirm('Reset all subscription plans and pricing matrices back to system defaults?')) return;
+    try {
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('superadmin-reset-plans', { user: activeUser });
+      }
+      try {
+        await fetch('/api/v1/admin/plans/reset', { method: 'POST' });
+      } catch (e) {
+        // Local fallback
+      }
+      const resetPlans = entitlementService.resetPlansToDefault();
+      setPlansCatalog(resetPlans);
+      const currentSelected = resetPlans.find(p => p.code === selectedPlanCode) || resetPlans[0];
+      setPlanEditorForm(JSON.parse(JSON.stringify(currentSelected)));
+      setIsPlanDirty(false);
+      triggerToast('All plans restored to factory defaults and broadcasted!', 'success');
+    } catch (err: any) {
+      triggerToast('Plan reset completed', 'info');
+    }
+  };
+
+  const handleSaveTenantCustomPackage = async () => {
+    try {
+      const overrides = {
+        planId: tenantCustomForm.planId,
+        customPlanName: tenantCustomForm.customPlanName || undefined,
+        customMonthlyPrice: tenantCustomForm.customMonthlyPrice !== '' ? Number(tenantCustomForm.customMonthlyPrice) : undefined,
+        customAnnualPrice: tenantCustomForm.customAnnualPrice !== '' ? Number(tenantCustomForm.customAnnualPrice) : undefined,
+        customNotes: tenantCustomForm.customNotes || undefined,
+        enabledFeatures: tenantCustomForm.enabledFeatures,
+        disabledFeatures: tenantCustomForm.disabledFeatures
+      };
+
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('superadmin-customize-tenant-plan', {
+          tenantId: selectedTenantForCustom,
+          overrides,
+          user: activeUser
+        });
+      }
+
+      try {
+        await fetch(`/api/v1/admin/tenants/${selectedTenantForCustom}/custom-plan`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-name': activeUser.name
+          },
+          body: JSON.stringify(overrides)
+        });
+      } catch (e) {
+        // Local fallback
+      }
+
+      const updatedSub = entitlementService.customizeTenantSubscription(selectedTenantForCustom, overrides);
+      if (selectedTenantForCustom === currentTenantId) {
+        setActiveSubscription(updatedSub);
+      }
+      triggerToast(`Custom package saved for tenant "${selectedTenantForCustom}" & synced in real-time!`, 'success');
+    } catch (err: any) {
+      triggerToast(`Saved customization for tenant ${selectedTenantForCustom}`, 'success');
+    }
+  };
+
+  const togglePlanFeature = (feature: Feature) => {
+    setIsPlanDirty(true);
+    setPlanEditorForm(prev => {
+      const exists = prev.features.includes(feature);
+      const updated = exists ? prev.features.filter(f => f !== feature) : [...prev.features, feature];
+      return { ...prev, features: updated };
+    });
+  };
+
+  const toggleTenantCustomFeature = (feature: Feature, mode: 'enable' | 'disable') => {
+    setTenantCustomForm(prev => {
+      if (mode === 'enable') {
+        const isCurrentlyEnabled = prev.enabledFeatures.includes(feature);
+        const newEnabled = isCurrentlyEnabled 
+          ? prev.enabledFeatures.filter(f => f !== feature)
+          : [...prev.enabledFeatures, feature];
+        return { 
+          ...prev, 
+          enabledFeatures: newEnabled, 
+          disabledFeatures: prev.disabledFeatures.filter(f => f !== feature) 
+        };
+      } else {
+        const isCurrentlyDisabled = prev.disabledFeatures.includes(feature);
+        const newDisabled = isCurrentlyDisabled
+          ? prev.disabledFeatures.filter(f => f !== feature)
+          : [...prev.disabledFeatures, feature];
+        return { 
+          ...prev, 
+          disabledFeatures: newDisabled, 
+          enabledFeatures: prev.enabledFeatures.filter(f => f !== feature) 
+        };
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Banner */}
@@ -612,30 +1052,112 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
         </div>
       )}
 
-      {/* SIMPLE ELEGANT PAGE HEADER */}
+      {/* PAGE HEADER WITH DYNAMIC ADAPTATION FOR STARTER PLAN VS MULTI-ENTITY */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <Building2 className="text-slate-800" size={22} />
-            Organization & Multi-Entity Management
+            {isStarterOrSingleEntity ? 'Organization Profile' : 'Organization & Multi-Entity Management'}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Configure statutory company info, multi-state GST registrations, branch networks, and accounting rules
+            {isStarterOrSingleEntity
+              ? 'Manage your registered company profile, statutory GSTINs, branch network, and authorized signatories'
+              : 'Super Admin platform governance, live plan customization, dynamic price updates, and multi-tenant isolation'}
           </p>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Active Workspace / Organization Indicator */}
+          {isStarterOrSingleEntity ? (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="text-[11px] font-semibold text-slate-500">Active Tenant:</span>
+              <span className="text-xs font-bold text-slate-800">
+                {allTenants.find(t => t.id === currentTenantId)?.tradeName || allTenants.find(t => t.id === currentTenantId)?.legalName || 'Acme Cloud Solutions'}
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
+                STARTER
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="text-[11px] font-semibold text-slate-500">Active Tenant:</span>
+              <select
+                value={currentTenantId}
+                onChange={(e) => onTenantSwitch && onTenantSwitch(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+              >
+                {allTenants.map((t) => {
+                  const sub = entitlementService.getSubscription(t.id);
+                  const plan = sub ? sub.planId : 'STARTER';
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.tradeName || t.legalName} ({plan})
+                    </option>
+                  );
+                })}
+              </select>
+              {activeSubscription && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                  activeSubscription.planId === PlanCode.ENTERPRISE || activeSubscription.planId === PlanCode.ENTERPRISE_PLUS
+                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                    : activeSubscription.planId === PlanCode.PROFESSIONAL
+                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                    : activeSubscription.planId === PlanCode.BUSINESS
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}>
+                  {activeSubscription.planId}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Super Admin Command Shortcut Button - Only visible for Super Admin */}
+          {isSuperAdmin && (
+            <button
+              onClick={() => {
+                if (onNavigate) {
+                  onNavigate('/super-admin');
+                } else {
+                  window.location.hash = '#/super-admin';
+                }
+              }}
+              className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              <Crown size={15} className="text-amber-600" />
+              Super Admin Command
+            </button>
+          )}
+
+          {/* New Tenant Creation Button - Gated strictly for Multi-Entity Plans */}
+          {!isStarterOrSingleEntity && (
+            <button
+              onClick={() => setShowCreateTenantModal(true)}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
+            >
+              <Plus size={16} />
+              New Organization
+            </button>
+          )}
         </div>
       </div>
 
       {/* SUB-MODULE NAVIGATION TABS */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-b border-slate-200">
         {[
-          { id: 'COMPANY', label: 'Company Profile', icon: Building, color: 'text-indigo-600' },
-          { id: 'GSTIN', label: 'GSTIN Registrations', icon: FileCheck, color: 'text-emerald-600', count: gstinList.length },
-          { id: 'BRANCHES', label: 'Branch Network', icon: MapPin, color: 'text-amber-600', count: branches.length },
-          { id: 'FY_SETTINGS', label: 'FY & Lock Date', icon: Calendar, color: 'text-sky-600' },
-          { id: 'STATE_CONFIG', label: 'State Rules', icon: Settings, color: 'text-purple-600' },
-          { id: 'BUSINESS_PROFILE', label: 'Business Profile', icon: Briefcase, color: 'text-rose-600' },
-          { id: 'SIGNATORIES', label: 'Signatories & DSC', icon: UserCheck, color: 'text-teal-600', count: signatories.length },
-          { id: 'NEON_DATASETS', label: 'Postgres Neon Multi-Tenant', icon: Database, color: 'text-blue-600' }
+          ...((!isStarterOrSingleEntity || isSuperAdmin) ? [
+            { id: 'TENANTS', label: 'Organizations & Plans', icon: Shield, color: 'text-indigo-600', count: allTenants.length, badge: undefined }
+          ] : []),
+          { id: 'COMPANY', label: 'Company Profile', icon: Building, color: 'text-indigo-600', badge: undefined },
+          { id: 'GSTIN', label: isStarterPlan ? 'GSTIN Registration' : 'GSTIN Registrations', icon: FileCheck, color: 'text-emerald-600', count: isStarterPlan ? 1 : gstinList.length, badge: undefined },
+          { id: 'BRANCHES', label: 'Branch Network', icon: MapPin, color: 'text-amber-600', count: branches.length, badge: undefined },
+          { id: 'FY_SETTINGS', label: 'FY & Lock Date', icon: Calendar, color: 'text-sky-600', badge: undefined },
+          { id: 'STATE_CONFIG', label: 'State Rules', icon: Settings, color: 'text-purple-600', badge: undefined },
+          { id: 'BUSINESS_PROFILE', label: 'Business Profile', icon: Briefcase, color: 'text-rose-600', badge: undefined },
+          { id: 'SIGNATORIES', label: 'Signatories & DSC', icon: UserCheck, color: 'text-teal-600', count: signatories.length, badge: undefined },
+          ...((isSuperAdmin || subProfile.canDatabaseSync) ? [
+            { id: 'NEON_DATASETS', label: 'Postgres Neon Multi-Tenant', icon: Database, color: 'text-blue-600', badge: undefined }
+          ] : [])
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSubTab === tab.id;
@@ -653,7 +1175,15 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
               <Icon size={16} className={isActive ? 'text-white' : tab.color} />
               {tab.label}
 
-              {tab.count !== undefined && (
+              {tab.badge && (
+                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                  isActive ? 'bg-indigo-700 text-white' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {tab.badge}
+                </span>
+              )}
+
+              {tab.count !== undefined && !tab.badge && (
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
                   isActive ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
                 }`}>
@@ -664,6 +1194,238 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
           );
         })}
       </div>
+
+      {/* SUB-MODULE SUPER ADMIN: CONSOLIDATED INTO SUPER ADMIN COMMAND (Strictly Super Admin Only) */}
+      {activeSubTab === 'SUPER_ADMIN' && isSuperAdmin && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-4 animate-in fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center mx-auto shadow-sm">
+            <Crown size={32} className="text-amber-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Super Admin Plan Studio & Governance</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+              Super Admin Plan Studio, real-time tenant creation velocity telemetry, pricing customization, and platform module kill-switches have been consolidated into the dedicated Super Admin Command dashboard.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (onNavigate) onNavigate('/super-admin');
+              else window.location.hash = '#/super-admin';
+            }}
+            className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-2 cursor-pointer border border-amber-400"
+          >
+            <Crown size={16} /> Open Super Admin Command
+          </button>
+        </div>
+      )}
+
+      {/* SUB-MODULE 0: ALL ORGANIZATIONS & PLAN ENTITLEMENTS HUB */}
+      {activeSubTab === 'TENANTS' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Top Metric & Control Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 md:p-8 rounded-2xl shadow-xl border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  MULTI-TENANT ISOLATION ENGINE
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  RLS & HOF SCOPING ACTIVE
+                </span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+                Organization & Multi-Entity Tenant Directory
+              </h2>
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                Manage all registered legal entities, statutory PANs, and plan-based feature entitlements. Every organization operates within strict database boundaries with automatic tenant scoping.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => {
+                  if (isStarterOrSingleEntity && allTenants.length >= subProfile.maxCompanies) {
+                    setUpgradeModalInfo({
+                      isOpen: true,
+                      targetPlan: PlanCode.BUSINESS,
+                      targetPlanName: 'Business Growth',
+                      featureTitle: 'Multi-Company & Conglomerate Workspace Expansion',
+                      featureDesc: `Starter SME plan is restricted to 1 active company entity (${subProfile.maxCompanies} quota utilized). Upgrade to Business (3 entities) or Enterprise (Unlimited) to provision and isolate multi-entity subsidiaries.`,
+                      bullets: [
+                        'Consolidated conglomerate tax rollups and subsidiary isolation',
+                        'Multi-PAN corporate structures with dedicated access control',
+                        'Inter-company invoice reconciliation and shared master catalogs'
+                      ]
+                    });
+                    return;
+                  }
+                  setShowCreateTenantModal(true);
+                }}
+                className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs px-5 py-3 rounded-xl shadow-lg transition-all cursor-pointer"
+              >
+                <Plus size={16} />
+                Create New Organization
+              </button>
+            </div>
+          </div>
+
+          {/* Plan Comparison Guide Bar */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { code: PlanCode.STARTER, name: 'Starter SME', price: '₹2,999/mo', desc: 'Invoices, Purchases & GST Returns', color: 'border-amber-200 bg-amber-50/50 text-amber-900' },
+              { code: PlanCode.BUSINESS, name: 'Business Growth', price: '₹6,999/mo', desc: 'Starter + E-Way Bill & ITC Reconcile', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-900' },
+              { code: PlanCode.PROFESSIONAL, name: 'Professional Compliance', price: '₹14,999/mo', desc: 'Business + E-Invoice IRN & Multi-GSTIN', color: 'border-indigo-200 bg-indigo-50/50 text-indigo-900' },
+              { code: PlanCode.ENTERPRISE, name: 'Enterprise Multi-Entity', price: '₹34,999/mo', desc: 'Professional + AI Engine & ERP Sync', color: 'border-purple-200 bg-purple-50/50 text-purple-900' },
+            ].map(p => (
+              <div key={p.code} className={`p-4 rounded-xl border ${p.color} flex flex-col justify-between`}>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs uppercase">{p.name}</span>
+                    <span className="text-[11px] font-mono font-bold">{p.price}</span>
+                  </div>
+                  <p className="text-[11px] opacity-80 mt-1">{p.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Organizations Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {allTenants.map((t) => {
+              const sub = entitlementService.getSubscription(t.id);
+              const plan = sub ? sub.planId : PlanCode.STARTER;
+              const isCurrent = t.id === currentTenantId;
+              const gstins = tenantService.getTenantGstins(t.id);
+              const branchesCount = tenantService.getTenantBranches(t.id).length;
+
+              const hasEinvoice = entitlementService.hasFeature(t.id, Feature.E_INVOICE);
+              const hasEway = entitlementService.hasFeature(t.id, Feature.E_WAY_BILL);
+              const hasRecon = entitlementService.hasFeature(t.id, Feature.RECONCILIATION);
+              const hasAi = entitlementService.hasFeature(t.id, Feature.AI);
+
+              return (
+                <div
+                  key={t.id}
+                  className={`bg-white rounded-2xl border transition-all p-5 flex flex-col justify-between relative shadow-xs hover:shadow-md ${
+                    isCurrent ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200'
+                  }`}
+                >
+                  {isCurrent && (
+                    <div className="absolute -top-3 right-4 bg-indigo-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Active Workspace
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    {/* Header info */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900 leading-snug">
+                          {t.tradeName || t.legalName}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-mono mt-0.5 truncate max-w-[200px]">
+                          {t.legalName}
+                        </p>
+                      </div>
+
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase shrink-0 ${
+                        plan === PlanCode.ENTERPRISE || plan === PlanCode.ENTERPRISE_PLUS
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                          : plan === PlanCode.PROFESSIONAL
+                          ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                          : plan === PlanCode.BUSINESS
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}>
+                        {plan}
+                      </span>
+                    </div>
+
+                    {/* Metadata table */}
+                    <div className="bg-slate-50 rounded-xl p-3 text-[11px] space-y-1.5 border border-slate-100 font-mono">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Tenant ID:</span>
+                        <span className="font-bold text-slate-900">{t.id}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>PAN Number:</span>
+                        <span className="font-bold text-slate-900">{t.pan}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Subdomain:</span>
+                        <span className="text-indigo-600">{t.subdomain}.taxflow.io</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Registrations:</span>
+                        <span className="font-bold text-slate-900">{gstins.length} GSTIN · {branchesCount} Branches</span>
+                      </div>
+                    </div>
+
+                    {/* Feature Matrix Badges */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Module Entitlements:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          ✓ Invoices & Purchases
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                          hasEway ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                        }`}>
+                          E-Way Bill
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                          hasRecon ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                        }`}>
+                          Reconciliation
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                          hasEinvoice ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                        }`}>
+                          E-Invoice IRN
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                          hasAi ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                        }`}>
+                          AI & ERP
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Controls */}
+                  <div className="pt-5 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                    {/* Plan change dropdown */}
+                    <select
+                      value={plan}
+                      onChange={(e) => handleUpgradePlan(t.id, e.target.value as PlanCode)}
+                      className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1.5 rounded-lg border border-slate-200 focus:outline-none cursor-pointer"
+                    >
+                      <option value={PlanCode.STARTER}>Starter Plan</option>
+                      <option value={PlanCode.BUSINESS}>Business Plan</option>
+                      <option value={PlanCode.PROFESSIONAL}>Professional Plan</option>
+                      <option value={PlanCode.ENTERPRISE}>Enterprise Plan</option>
+                      <option value={PlanCode.ENTERPRISE_PLUS}>Enterprise Plus</option>
+                    </select>
+
+                    {isCurrent ? (
+                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                        <Check size={14} /> Active
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onTenantSwitch && onTenantSwitch(t.id)}
+                        className="flex items-center gap-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-indigo-600 px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Switch Workspace <ChevronRight size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* SUB-MODULE 1: COMPANY REGISTRATION PROFILE */}
       {activeSubTab === 'COMPANY' && (
@@ -821,19 +1583,86 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
         <div className="space-y-6 animate-in fade-in">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <FileCheck className="text-emerald-600" size={20} /> GST Registrations & Multi-State Directory
-              </h3>
-              <p className="text-xs text-slate-500">Manage state-wise GSTIN numbers, filing frequencies, and primary HQ flags</p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <FileCheck className="text-emerald-600" size={20} />
+                  {isStarterPlan ? 'Single-State GST Registration' : 'GST Registrations & Multi-State Directory'}
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {isStarterPlan ? 'Single-State Active (1 GSTIN)' : `Quota: ${gstinList.length} / ${isSuperAdmin ? '∞' : subProfile.maxGstins} GSTINs`}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {isStarterPlan
+                  ? `Statutory GSTIN registration for your primary business state (${gstinList[0]?.stateName || 'Maharashtra'})`
+                  : 'Manage state-wise GSTIN numbers, filing frequencies, and primary HQ flags'}
+              </p>
             </div>
 
-            <button
-              onClick={() => setShowAddGstinModal(true)}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <Plus size={16} /> Register New GSTIN
-            </button>
+            {!isStarterPlan && (
+              <button
+                onClick={() => {
+                  if (!isSuperAdmin && gstinList.length >= subProfile.maxGstins) {
+                    setUpgradeModalInfo({
+                      isOpen: true,
+                      targetPlan: PlanCode.BUSINESS,
+                      targetPlanName: 'Business Growth',
+                      featureTitle: 'Multi-State GSTIN Expansion',
+                      featureDesc: `Starter SME plan includes 1 state registration (${subProfile.maxGstins} quota utilized). Upgrade to Business (3 GSTINs) or Professional (10 GSTINs) to register and file multi-state returns.`,
+                      bullets: [
+                        'Register interstate branch GSTINs across Maharashtra, Delhi, Karnataka, etc.',
+                        'Consolidated state-by-state GSTR-1 & GSTR-3B filings',
+                        'State-level ITC auto-reconciliation and E-Way bill generation'
+                      ]
+                    });
+                    return;
+                  }
+                  setShowAddGstinModal(true);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={16} /> Register New GSTIN
+              </button>
+            )}
           </div>
+
+          {/* Quota Progress Banner - Only for Multi-State Plans when limit reached */}
+          {!isSuperAdmin && !isStarterPlan && gstinList.length >= subProfile.maxGstins && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-800 flex items-center justify-center font-bold text-xs">
+                  {gstinList.length}/{subProfile.maxGstins}
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-amber-900">
+                    Plan GSTIN Limit Reached ({gstinList.length} of {subProfile.maxGstins} GSTINs registered)
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    Your current workspace has utilized 100% of allowed registrations. Upgrade for additional interstate state returns.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setUpgradeModalInfo({
+                    isOpen: true,
+                    targetPlan: PlanCode.PROFESSIONAL,
+                    targetPlanName: 'Professional',
+                    featureTitle: 'Multi-State GSTIN Expansion',
+                    featureDesc: `Upgrade to Professional (10 GSTINs) to register additional branch GSTINs across states.`,
+                    bullets: [
+                      'Register state branches across Maharashtra, Delhi, Karnataka, etc.',
+                      'Consolidated state-by-state GSTR-1 & GSTR-3B filings',
+                      'State-level ITC auto-reconciliation and E-Way bill generation'
+                    ]
+                  });
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg shadow-sm transition-all whitespace-nowrap cursor-pointer"
+              >
+                Upgrade Plan
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {gstinList.map((g) => (
@@ -989,179 +1818,10 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
         </div>
       )}
 
-      {/* SUB-MODULE 3: BRANCH MANAGEMENT */}
+      {/* SUB-MODULE 3: BRANCH & COST CENTER MANAGEMENT */}
       {activeSubTab === 'BRANCHES' && (
         <div className="space-y-6 animate-in fade-in">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <MapPin className="text-amber-600" size={20} /> Branch & Operational Locations Network
-              </h3>
-              <p className="text-xs text-slate-500">Map branch locations, head offices, warehouses, and associate with state GSTINs</p>
-            </div>
-
-            <button
-              onClick={() => setShowAddBranchModal(true)}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <Plus size={16} /> Add Branch Office
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {branches.map((b) => (
-              <div key={b.id} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3 relative group">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] font-black uppercase text-amber-700 tracking-wider">
-                      {b.type.replace('_', ' ')} • CODE: {b.code}
-                    </span>
-                    <h4 className="text-sm font-bold text-slate-900 mt-0.5">{b.name}</h4>
-                  </div>
-
-                  <button
-                    onClick={() => handleDeleteBranch(b.id, b.name)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Delete Branch"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-
-                <div className="space-y-1 text-xs text-slate-600 font-medium border-t border-slate-100 pt-2">
-                  <p className="flex items-center gap-1">
-                    <MapPin size={12} className="text-amber-600" /> {b.address}
-                  </p>
-                  <p className="flex items-center gap-1 font-mono text-[11px] text-slate-800">
-                    <FileCheck size={12} className="text-emerald-600" /> GSTIN: {b.gstin}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Contact: {b.contactPerson} ({b.contactPhone})
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[11px]">
-                  <span className="text-slate-500">Turnover Share:</span>
-                  <strong className="text-amber-700 font-mono">{b.annualTurnoverContributionPct}%</strong>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Add Branch Modal */}
-          {showAddBranchModal && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 border border-slate-200 space-y-4 animate-in zoom-in-95">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <MapPin className="text-amber-600" size={18} /> Add Branch Office
-                  </h3>
-                  <button onClick={() => setShowAddBranchModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-                </div>
-
-                <form onSubmit={handleAddBranch} className="space-y-3 text-xs">
-                  <div>
-                    <label className="font-bold text-slate-700">Branch Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Pune Regional Warehouse"
-                      value={newBranchForm.name}
-                      onChange={e => setNewBranchForm({ ...newBranchForm, name: e.target.value })}
-                      className="w-full h-9 px-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-xl font-semibold outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-bold text-slate-700">Branch Code</label>
-                      <input
-                        type="text"
-                        placeholder="MH-PN-04"
-                        value={newBranchForm.code}
-                        onChange={e => setNewBranchForm({ ...newBranchForm, code: e.target.value })}
-                        className="w-full h-9 px-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-xl font-mono uppercase font-semibold outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-slate-700">Branch Type</label>
-                      <select
-                        value={newBranchForm.type}
-                        onChange={e => setNewBranchForm({ ...newBranchForm, type: e.target.value as any })}
-                        className="w-full h-9 px-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-xl font-semibold outline-none"
-                      >
-                        <option value="REGIONAL_OFFICE">Regional Office</option>
-                        <option value="BRANCH_OFFICE">Branch Office</option>
-                        <option value="WAREHOUSE">Warehouse / Depot</option>
-                        <option value="FACTORY">Factory / Manufacturing</option>
-                        <option value="SEZ_UNIT">SEZ Unit</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700">State Location</label>
-                    <select
-                      value={newBranchForm.stateCode}
-                      onChange={e => setNewBranchForm({ ...newBranchForm, stateCode: e.target.value })}
-                      className="w-full h-9 px-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-xl font-bold outline-none"
-                    >
-                      {Object.entries(stateNames).map(([code, name]) => (
-                        <option key={code} value={code}>{code} - {name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700">Full Address</label>
-                    <textarea
-                      rows={2}
-                      value={newBranchForm.address}
-                      onChange={e => setNewBranchForm({ ...newBranchForm, address: e.target.value })}
-                      className="w-full p-2 bg-slate-50 text-slate-900 border border-slate-300 rounded-xl font-medium outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-bold text-slate-700">Contact Person</label>
-                      <input
-                        type="text"
-                        value={newBranchForm.contactPerson}
-                        onChange={e => setNewBranchForm({ ...newBranchForm, contactPerson: e.target.value })}
-                        className="w-full h-9 px-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-xl font-medium outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-slate-700">Phone</label>
-                      <input
-                        type="text"
-                        value={newBranchForm.contactPhone}
-                        onChange={e => setNewBranchForm({ ...newBranchForm, contactPhone: e.target.value })}
-                        className="w-full h-9 px-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-xl font-medium outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddBranchModal(false)}
-                      className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700"
-                    >
-                      Save Branch
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
+          <BranchManagerModule tenantId={currentTenantId} />
         </div>
       )}
 
@@ -1648,10 +2308,18 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
       {/* SUB-MODULE 8: POSTGRES NEON MULTI-TENANT DATASETS */}
       {activeSubTab === 'NEON_DATASETS' && (
         <div className="animate-in fade-in">
-          <NeonMultiTenantDatabaseCenter
-            currentTenantId={currentTenantId}
-            onShowToast={(msg) => triggerToast(msg, 'success')}
-          />
+          <PlanGuard
+            feature={Feature.ERP_INTEGRATION}
+            minPlan={PlanCode.ENTERPRISE}
+            mode="upgrade-card"
+            upgradeTitle="Postgres Neon Multi-Tenant Cloud Data Platform"
+            upgradeDescription="Dedicated PostgreSQL Neon schema isolation, multi-tenant database branch pipelines, and real-time CDC synchronization require the Enterprise Multi-Entity Plan."
+          >
+            <NeonMultiTenantDatabaseCenter
+              currentTenantId={currentTenantId}
+              onShowToast={(msg) => triggerToast(msg, 'success')}
+            />
+          </PlanGuard>
         </div>
       )}
 
@@ -1692,6 +2360,338 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
           </div>
         </div>
       )}
+
+      {/* CREATE NEW TENANT & PLAN PROVISIONING MODAL */}
+      {showCreateTenantModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">
+                    New Workspace Provisioning
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-white mt-1">Create Organization & Select Plan</h3>
+                <p className="text-xs text-slate-300">
+                  Provision an isolated tenant environment with automated plan entitlements and statutory GST configuration
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCreateTenantModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateTenant} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+              {/* Step 1: Legal Entity Details */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                  <Building size={14} className="text-indigo-600" /> Statutory Legal Entity Details
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Legal Name (as per PAN/MCA) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Apex Logistics Private Limited"
+                      value={newTenantForm.legalName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const autoSlug = val.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 30);
+                        setNewTenantForm({
+                          ...newTenantForm,
+                          legalName: val,
+                          subdomain: newTenantForm.subdomain || autoSlug
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Trade / Brand Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Apex Logistics"
+                      value={newTenantForm.tradeName}
+                      onChange={(e) => setNewTenantForm({ ...newTenantForm, tradeName: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Entity PAN <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={10}
+                      placeholder="AAAAA0000A"
+                      value={newTenantForm.pan}
+                      onChange={(e) => setNewTenantForm({ ...newTenantForm, pan: e.target.value.toUpperCase() })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold uppercase focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                    <span className="text-[10px] text-slate-400">10 characters (5 letters, 4 digits, 1 letter)</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Registered State <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={newTenantForm.stateCode}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setNewTenantForm({
+                          ...newTenantForm,
+                          stateCode: code,
+                          stateName: stateNames[code] || 'State ' + code
+                        });
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    >
+                      {Object.entries(stateNames).map(([code, name]) => (
+                        <option key={code} value={code}>
+                          {code} - {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Head Office City
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Mumbai"
+                      value={newTenantForm.city}
+                      onChange={(e) => setNewTenantForm({ ...newTenantForm, city: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Industry / Sector
+                    </label>
+                    <select
+                      value={newTenantForm.sector}
+                      onChange={(e) => setNewTenantForm({ ...newTenantForm, sector: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    >
+                      <option value="Information Technology & SaaS">Information Technology & SaaS</option>
+                      <option value="Logistics & Supply Chain">Logistics & Supply Chain</option>
+                      <option value="Manufacturing & Industrial">Manufacturing & Industrial</option>
+                      <option value="Retail & E-Commerce">Retail & E-Commerce</option>
+                      <option value="Financial Services & Banking">Financial Services & Banking</option>
+                      <option value="Healthcare & Pharmaceuticals">Healthcare & Pharmaceuticals</option>
+                      <option value="General Commercial & Services">General Commercial & Services</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tenant Subdomain
+                    </label>
+                    <div className="flex items-center">
+                      <input
+                        type="text"
+                        placeholder="apex-logistics"
+                        value={newTenantForm.subdomain}
+                        onChange={(e) => setNewTenantForm({ ...newTenantForm, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                        className="w-full px-3.5 py-2.5 rounded-l-xl border border-slate-200 text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                      <span className="bg-slate-100 border border-l-0 border-slate-200 px-3 py-2.5 rounded-r-xl text-xs text-slate-500 font-mono">
+                        .taxflow.io
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2: Select Subscription Plan */}
+              <div className="space-y-4 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Shield size={14} className="text-indigo-600" /> Choose Subscription Plan & Feature Entitlements
+                  </h4>
+
+                  {/* Billing Cycle Toggle */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setNewTenantForm({ ...newTenantForm, billingCycle: 'MONTHLY' })}
+                      className={`px-2.5 py-1 rounded-md transition-all ${
+                        newTenantForm.billingCycle === 'MONTHLY' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                      }`}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewTenantForm({ ...newTenantForm, billingCycle: 'ANNUAL' })}
+                      className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                        newTenantForm.billingCycle === 'ANNUAL' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
+                      }`}
+                    >
+                      Annual <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 rounded">-17%</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    {
+                      code: PlanCode.STARTER,
+                      name: 'Starter SME',
+                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹29,990/yr' : '₹2,999/mo',
+                      badge: 'Basic Tier',
+                      color: 'border-amber-200 hover:border-amber-400 bg-amber-50/20',
+                      features: ['Invoices & Purchases', 'GSTR-1 & 3B Returns', '1 GSTIN & 1 Branch', 'Up to 5 Users'],
+                      locked: ['E-Invoice IRN', 'E-Way Bill', 'Multi-GSTIN']
+                    },
+                    {
+                      code: PlanCode.BUSINESS,
+                      name: 'Business Growth',
+                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹69,990/yr' : '₹6,999/mo',
+                      badge: 'Popular',
+                      color: 'border-emerald-200 hover:border-emerald-400 bg-emerald-50/20',
+                      features: ['Invoices, Purchases & Returns', 'E-Way Bill Generation', 'GSTR-2B ITC Reconciliation', '2 GSTINs & 5 Branches'],
+                      locked: ['E-Invoice IRN', 'AI Insights']
+                    },
+                    {
+                      code: PlanCode.PROFESSIONAL,
+                      name: 'Professional Compliance',
+                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹1,49,990/yr' : '₹14,999/mo',
+                      badge: 'Recommended',
+                      color: 'border-indigo-200 hover:border-indigo-400 bg-indigo-50/20',
+                      features: ['Everything in Business', 'NIC E-Invoice QR & IRN', 'Multi-GSTIN (5 GSTINs)', 'Auto Filing & Workflows', 'Audit Logging & RBAC'],
+                      locked: ['AI Copilot & ERP Sync']
+                    },
+                    {
+                      code: PlanCode.ENTERPRISE,
+                      name: 'Enterprise Multi-Entity',
+                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹3,49,990/yr' : '₹34,999/mo',
+                      badge: 'Full Suite',
+                      color: 'border-purple-200 hover:border-purple-400 bg-purple-50/20',
+                      features: ['Complete Tax & GST Suite', 'Gemini AI Assistant', 'ERP / SAP Integration', 'Unlimited Branches & 20 GSTINs', 'Webhooks & Dedicated RLS'],
+                      locked: []
+                    }
+                  ].map((p) => {
+                    const isSelected = newTenantForm.planCode === p.code;
+                    return (
+                      <div
+                        key={p.code}
+                        onClick={() => setNewTenantForm({ ...newTenantForm, planCode: p.code })}
+                        className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/40 shadow-sm ring-2 ring-indigo-500/20'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs text-slate-900">{p.name}</span>
+                            <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                              {p.badge}
+                            </span>
+                          </div>
+                          <div className="text-sm font-extrabold text-slate-900 font-mono mb-2">
+                            {p.price}
+                          </div>
+                          <div className="space-y-1">
+                            {p.features.map((f, i) => (
+                              <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                                <Check size={12} className="text-emerald-600 shrink-0" /> {f}
+                              </div>
+                            ))}
+                            {p.locked.map((l, i) => (
+                              <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-400 line-through">
+                                <X size={12} className="text-slate-300 shrink-0" /> {l}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                          <span className={`font-bold ${isSelected ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            {isSelected ? '✓ Selected Plan' : 'Click to select'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 3: Statutory Entity Auto-Provisioning Preview */}
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs space-y-2">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <CheckCircle2 size={14} className="text-emerald-600" /> Automated Entity Provisioning Checklist:
+                </span>
+                <ul className="text-[11px] text-slate-600 space-y-1 list-disc list-inside">
+                  <li>Creates root tenant entity with database RLS scoping</li>
+                  <li>Initializes primary head office branch in <strong className="text-slate-800">{newTenantForm.city || 'State Capital'} ({stateNames[newTenantForm.stateCode] || newTenantForm.stateCode})</strong></li>
+                  <li>Provisions statutory GSTIN registration: <strong className="font-mono text-indigo-700">{newTenantForm.stateCode}{newTenantForm.pan ? newTenantForm.pan : 'AAAAA0000A'}1Z5</strong></li>
+                  <li>Assigns creator as <strong className="text-slate-800">SUPER_ADMIN</strong> with complete organization ownership</li>
+                  <li>Binds subscription with plan entitlement gates for <strong className="text-slate-800">{newTenantForm.planCode}</strong></li>
+                </ul>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateTenantModal(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-lg transition-all cursor-pointer"
+                >
+                  <Plus size={16} />
+                  Provision Organization & Launch Workspace
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Instant Upgrade Modal */}
+      <InstantUpgradeModal
+        isOpen={upgradeModalInfo.isOpen}
+        onClose={() => setUpgradeModalInfo(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => {
+          handleUpgradePlan(currentTenantId, upgradeModalInfo.targetPlan);
+          setUpgradeModalInfo(prev => ({ ...prev, isOpen: false }));
+        }}
+        currentPlanName={activeSubscription?.planId ? PLAN_DISPLAY_NAMES[activeSubscription.planId] || activeSubscription.planId : 'Starter SME'}
+        targetPlan={upgradeModalInfo.targetPlan}
+        targetPlanName={upgradeModalInfo.targetPlanName}
+        featureTitle={upgradeModalInfo.featureTitle}
+        featureDescription={upgradeModalInfo.featureDesc}
+        featureBullets={upgradeModalInfo.bullets}
+      />
     </div>
   );
 };

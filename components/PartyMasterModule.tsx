@@ -15,10 +15,12 @@ import {
   extractPanFromGstin, extractStateCodeFromGstin
 } from '../services/partyMasterService';
 import { PartyMasterPagination } from './PartyMasterPagination';
+import { ClientDocumentUpload } from './ClientDocumentUpload';
 
 export const PartyMasterModule: React.FC = () => {
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'VENDORS' | 'MSME_RCM_DIRECTORY' | 'BULK_IMPORT'>('CUSTOMERS');
+  const [activeTab, setActiveTab] = useState<'CUSTOMERS' | 'VENDORS' | 'MSME_RCM_DIRECTORY' | 'BULK_IMPORT' | 'CLIENT_DOCS'>('CUSTOMERS');
+  const [selectedClientForUpload, setSelectedClientForUpload] = useState<string>('');
 
   // Customer & Vendor Lists
   const [customers, setCustomers] = useState<CustomerMaster[]>([]);
@@ -1254,6 +1256,18 @@ export const PartyMasterModule: React.FC = () => {
           >
             <Upload size={15} className={activeTab === 'BULK_IMPORT' ? 'text-white' : 'text-slate-500'} /> Bulk Data Import
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('CLIENT_DOCS')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'CLIENT_DOCS'
+                ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-600'
+                : 'bg-blue-50/70 text-blue-800 hover:bg-blue-100 border border-blue-200'
+            }`}
+          >
+            <ShieldCheck size={15} className={activeTab === 'CLIENT_DOCS' ? 'text-white' : 'text-blue-600'} /> Client Document Upload &amp; GST Check
+          </button>
         </div>
       </div>
 
@@ -1322,6 +1336,17 @@ export const PartyMasterModule: React.FC = () => {
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 type="button"
+                                onClick={() => {
+                                  setSelectedClientForUpload(cust.id);
+                                  setActiveTab('CLIENT_DOCS');
+                                }}
+                                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold transition-colors flex items-center gap-1 border border-blue-200"
+                                title="Upload / Categorize Documents for this Client"
+                              >
+                                <Upload size={12} /> Docs &amp; GST Check
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => openEditCustomerModal(cust)}
                                 className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                 title="Edit Customer"
@@ -1375,6 +1400,17 @@ export const PartyMasterModule: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedClientForUpload(cust.id);
+                            setActiveTab('CLIENT_DOCS');
+                          }}
+                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 border border-blue-200"
+                          title="Upload / Categorize Documents for this Client"
+                        >
+                          <Upload size={14} /> Docs &amp; GST Check
+                        </button>
                         <button
                           type="button"
                           onClick={() => openEditCustomerModal(cust)}
@@ -1777,6 +1813,11 @@ export const PartyMasterModule: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* TAB 5: CLIENT DOCUMENT UPLOAD & AUTOMATED GST CATEGORIZATION */}
+      {activeTab === 'CLIENT_DOCS' && (
+        <ClientDocumentUpload initialClientId={selectedClientForUpload} showHeader={false} />
       )}
 
       {/* MODAL: ADD / EDIT CUSTOMER */}

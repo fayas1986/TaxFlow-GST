@@ -443,28 +443,28 @@ export const InactivityPolicyConfigurator: React.FC<InactivityPolicyConfigurator
       {/* SIMULATED PREVIEW MODAL */}
       <AnimatePresence>
         {showSimulatedWarning && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="fixed inset-0 z-[10000] overflow-y-auto p-4 flex min-h-screen items-center justify-center bg-slate-950/75 backdrop-blur-md">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 text-center"
+              className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 text-center my-auto max-h-[92vh] flex flex-col"
             >
-              <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white p-4 font-bold text-xs flex items-center justify-between">
+              <div className="shrink-0 bg-gradient-to-r from-amber-500 to-orange-600 text-white p-3.5 font-bold text-xs flex items-center justify-between">
                 <span className="flex items-center gap-2">
-                  <ShieldAlert size={16} /> Admin Simulated Preview Modal
+                  <ShieldAlert size={15} /> Admin Simulated Preview Modal
                 </span>
                 <span className="font-mono bg-black/20 px-2 py-0.5 rounded text-[10px]">
                   Dept: {editedPolicy.departmentName}
                 </span>
               </div>
 
-              <div className="p-8 space-y-4">
-                <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
-                  <Clock size={36} />
+              <div className="p-5 sm:p-6 space-y-3.5 overflow-y-auto">
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
+                  <Clock size={28} />
                 </div>
 
-                <h3 className="text-xl font-extrabold text-slate-900">
+                <h3 className="text-lg font-extrabold text-slate-900">
                   Inactivity Alert Preview ({editedPolicy.inactivityTimeoutMinutes} Min Threshold)
                 </h3>
 
@@ -486,7 +486,7 @@ export const InactivityPolicyConfigurator: React.FC<InactivityPolicyConfigurator
                 <button
                   type="button"
                   onClick={() => setShowSimulatedWarning(false)}
-                  className="w-full py-3 bg-blue-600 text-white rounded-xl text-xs font-extrabold shadow-md hover:bg-blue-500"
+                  className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-extrabold shadow-md hover:bg-blue-500 cursor-pointer"
                 >
                   Close Preview
                 </button>

@@ -4,11 +4,13 @@ import {
   Calculator, Search, Percent, ArrowRight, CheckCircle2, Copy, 
   Filter, ShieldCheck, AlertCircle, IndianRupee, Layers, 
   Sparkles, RefreshCw, FileText, Check, BookOpen, Info,
-  ArrowDownRight, Tag, HelpCircle, ArrowUpRight, Scale
+  ArrowDownRight, Tag, HelpCircle, ArrowUpRight, Scale, Globe, Zap
 } from 'lucide-react';
 import { HSN_DIRECTORY } from '../data/hsnData';
 import { HSNCode } from '../types';
 import { STATUTORY_SCHEDULES } from '../services/gstEngine/taxCalculator';
+import SmartTaxRateClassifier from '../components/SmartTaxRateClassifier';
+import { GlobalTaxRatesLookup } from '../components/GlobalTaxRatesLookup';
 
 // Official GST Portal & CBIC Statutory Slabs Metadata
 export const STATUTORY_SLAB_INFO: Record<number, { 
@@ -96,8 +98,32 @@ export const GstRateCalculatorPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Determine initial active tab based on pathname and search query
+  const getInitialTab = (): 'CALCULATOR' | 'AI_CLASSIFIER' | 'DIRECTORY' | 'GLOBAL_RATES' => {
+    const searchParams = new URLSearchParams(location.search);
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'ai' || tabParam === 'classifier') return 'AI_CLASSIFIER';
+    if (tabParam === 'directory') return 'DIRECTORY';
+    if (tabParam === 'global') return 'GLOBAL_RATES';
+    if (tabParam === 'calculator') return 'CALCULATOR';
+
+    if (location.pathname.includes('/smart-classifier') || location.pathname.includes('/tax-classifier')) {
+      return 'AI_CLASSIFIER';
+    }
+    return 'CALCULATOR';
+  };
+
+  // Active Main Navigation Tab
+  const [activeMainTab, setActiveMainTab] = useState<'AI_CLASSIFIER' | 'CALCULATOR' | 'DIRECTORY' | 'GLOBAL_RATES'>(getInitialTab);
+
+  // Sync tab with URL pathname changes
+  useEffect(() => {
+    setActiveMainTab(getInitialTab());
+  }, [location.pathname, location.search]);
+
   // Calculator Form State
   const [selectedHsnId, setSelectedHsnId] = useState<string>('hsn-8471'); // default to 8471 Laptops (18%)
+  const [hsnSearchQuery, setHsnSearchQuery] = useState<string>('');
   const [customTaxRate, setCustomTaxRate] = useState<number | null>(null);
   const [calculationMode, setCalculationMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('EXCLUSIVE');
   const [amountMode, setAmountMode] = useState<'TOTAL' | 'QTY_RATE'>('TOTAL');
@@ -136,8 +162,19 @@ export const GstRateCalculatorPage: React.FC = () => {
 
   // Currently selected HSN record
   const selectedItem: HSNCode = useMemo(() => {
-    return HSN_DIRECTORY.find(item => item.id === selectedHsnId) || HSN_DIRECTORY[0];
+    return HSN_DIRECTORY.find(item => item.id === selectedHsnId || item.code === selectedHsnId) || HSN_DIRECTORY[0];
   }, [selectedHsnId]);
+
+  // Filtered HSN directory for instant search box inside calculator
+  const matchingHsnItems = useMemo(() => {
+    if (!hsnSearchQuery.trim()) return [];
+    const q = hsnSearchQuery.toLowerCase().trim();
+    return HSN_DIRECTORY.filter(item => 
+      item.code.toLowerCase().includes(q) || 
+      item.description.toLowerCase().includes(q) ||
+      (item.chapter && item.chapter.toLowerCase().includes(q))
+    ).slice(0, 6);
+  }, [hsnSearchQuery]);
 
   // Effective Tax Rate
   const effectiveTaxRate = customTaxRate !== null ? customTaxRate : selectedItem.taxRate;
@@ -329,17 +366,48 @@ Generated via TaxFlow Enterprise GST Rate Engine`;
 
           <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={() => {
-                navigate('/hsn-lookup');
-              }}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2"
+              onClick={() => setActiveMainTab('AI_CLASSIFIER')}
+              className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer ${
+                activeMainTab === 'AI_CLASSIFIER'
+                  ? 'bg-indigo-600 text-white shadow-indigo-200'
+                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+              }`}
             >
-              <Search size={15} className="text-white" />
-              <span>HSN/SAC Directory & Gazette</span>
+              <Sparkles size={15} />
+              <span>AI Smart Classifier</span>
+            </button>
+            <button
+              onClick={() => setActiveMainTab('CALCULATOR')}
+              className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer ${
+                activeMainTab === 'CALCULATOR'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              <Calculator size={15} />
+              <span>Statutory Calculator</span>
+            </button>
+            <button
+              onClick={() => setActiveMainTab('GLOBAL_RATES')}
+              className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer ${
+                activeMainTab === 'GLOBAL_RATES'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              <Globe size={15} />
+              <span>Global Tax Rates</span>
+            </button>
+            <button
+              onClick={() => navigate('/hsn-lookup')}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200/80 transition-all flex items-center gap-2 shadow-xs cursor-pointer"
+            >
+              <Search size={15} className="text-slate-600" />
+              <span>HSN / SAC Center</span>
             </button>
             <button
               onClick={copyBreakdownToClipboard}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200/80 transition-all flex items-center gap-2 shadow-xs"
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200/80 transition-all flex items-center gap-2 shadow-xs cursor-pointer"
             >
               {copiedNotification ? (
                 <>
@@ -353,17 +421,69 @@ Generated via TaxFlow Enterprise GST Rate Engine`;
                 </>
               )}
             </button>
-            <button
-              onClick={handleCreateInvoiceFromCalc}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 active:scale-95"
-            >
-              <FileText size={16} />
-              <span>Create Invoice</span>
-            </button>
           </div>
         </div>
       </div>
 
+      {/* Main Tab View Rendering */}
+      {activeMainTab === 'AI_CLASSIFIER' && (
+        <div className="space-y-6">
+          <SmartTaxRateClassifier
+            onSelectRate={(classified) => {
+              const matchedHsn = HSN_DIRECTORY.find(h => h.code === classified.hsnSacCode);
+              if (matchedHsn) {
+                setSelectedHsnId(matchedHsn.id);
+              }
+              if (classified.inputContext?.price) {
+                setTaxableAmount(String(classified.inputContext.price));
+              }
+              if (classified.inputContext?.isInterstate !== undefined) {
+                setSupplyType(classified.inputContext.isInterstate ? 'INTER' : 'INTRA');
+              }
+            }}
+            onApplyToInvoice={(classified) => {
+              const draftLineItem = {
+                id: `draft-ai-${Date.now()}`,
+                description: classified.description || classified.hsnSacTitle,
+                hsnSac: classified.hsnSacCode,
+                quantity: 1,
+                unit: 'PCS',
+                rate: classified.inputContext?.price || 10000,
+                taxRate: classified.suggestedRate,
+                taxableValue: classified.inputContext?.price || 10000,
+                taxAmount: ((classified.inputContext?.price || 10000) * classified.suggestedRate) / 100,
+                cgst: classified.cgstRate ? ((classified.inputContext?.price || 10000) * classified.cgstRate) / 100 : 0,
+                sgst: classified.sgstRate ? ((classified.inputContext?.price || 10000) * classified.sgstRate) / 100 : 0,
+                igst: classified.igstRate ? ((classified.inputContext?.price || 10000) * classified.igstRate) / 100 : 0,
+                total: (classified.inputContext?.price || 10000) * (1 + (classified.suggestedRate + (classified.cessRate || 0)) / 100),
+                isInterstate: supplyType === 'INTER',
+              };
+
+              try {
+                sessionStorage.setItem('taxflow_quick_tax_draft_item', JSON.stringify(draftLineItem));
+              } catch (e) {
+                console.warn(e);
+              }
+
+              navigate('/invoices', {
+                state: {
+                  openDraft: true,
+                  prefilledDraftItem: draftLineItem,
+                }
+              });
+            }}
+          />
+        </div>
+      )}
+
+      {activeMainTab === 'GLOBAL_RATES' && (
+        <div className="space-y-6">
+          <GlobalTaxRatesLookup />
+        </div>
+      )}
+
+      {(activeMainTab === 'CALCULATOR' || activeMainTab === 'DIRECTORY') && (
+      <>
       {/* Main Two-Column Layout: Calculator & Selected HSN Details */}
       <div id="gst-calculator-tool-box" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Interactive Calculator Inputs */}
@@ -392,17 +512,67 @@ Generated via TaxFlow Enterprise GST Rate Engine`;
               </button>
             </div>
 
-            {/* 1. HSN / SAC Code Selector Dropdown with Search */}
+            {/* 1. HSN / SAC Code Selector Dropdown with Instant Autocomplete Search */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                   <Tag size={13} className="text-blue-600" />
-                  Select HSN / SAC Classification
+                  HSN / SAC Classification & Tariff Code
                 </label>
                 <span className="text-[11px] font-bold text-slate-500">
                   {selectedItem.category === 'GOODS' ? 'Goods (HSN)' : 'Services (SAC)'}
                 </span>
               </div>
+
+              {/* Quick Search Input for HSN / Product */}
+              <div className="relative">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={hsnSearchQuery}
+                  onChange={(e) => setHsnSearchQuery(e.target.value)}
+                  placeholder="Quick search HSN/SAC by code or keyword (e.g. 8471, Laptop, 9983, Legal)..."
+                  className="w-full h-10 pl-9 pr-8 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-400"
+                />
+                {hsnSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setHsnSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Search Suggestions Dropdown if query present */}
+              {matchingHsnItems.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 space-y-1 z-20 relative">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase px-2 py-0.5 block">Suggested Matches:</span>
+                  {matchingHsnItems.map(item => (
+                    <button
+                      key={item.id || item.code}
+                      type="button"
+                      onClick={() => {
+                        setSelectedHsnId(item.id || item.code);
+                        setCustomTaxRate(null);
+                        setHsnSearchQuery('');
+                      }}
+                      className="w-full text-left p-2 rounded-lg hover:bg-blue-50/70 transition-colors flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[11px]">
+                          {item.code}
+                        </span>
+                        <span className="text-slate-800 font-medium truncate">{item.description}</span>
+                      </div>
+                      <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded text-[10px] shrink-0">
+                        {item.taxRate}%
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
               
               <div className="relative">
                 <select
@@ -411,7 +581,7 @@ Generated via TaxFlow Enterprise GST Rate Engine`;
                     setSelectedHsnId(e.target.value);
                     setCustomTaxRate(null);
                   }}
-                  className="w-full h-12 px-3.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer"
+                  className="w-full h-11 px-3.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer"
                 >
                   {HSN_DIRECTORY.map((hsn) => (
                     <option key={hsn.id || `${hsn.code}-${hsn.taxRate}`} value={hsn.id || hsn.code}>
@@ -834,20 +1004,92 @@ Generated via TaxFlow Enterprise GST Rate Engine`;
             <div className="pt-2 flex items-center gap-3">
               <button
                 onClick={copyBreakdownToClipboard}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Copy size={15} />
                 <span>Copy Summary</span>
               </button>
               <button
                 onClick={handleCreateInvoiceFromCalc}
-                className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all border border-slate-300 flex items-center justify-center gap-2 active:scale-95"
+                className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95 shadow-sm cursor-pointer"
                 title="Create Invoice with this calculation"
               >
+                <span>Draft Invoice</span>
                 <ArrowRight size={15} />
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Multi-Slab Comparative Simulator Table */}
+      <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Layers size={18} className="text-blue-600" />
+            <h3 className="text-sm font-bold text-slate-900">
+              Comparative GST Slabs Simulation for ₹{rawInputAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })} ({calculationMode === 'EXCLUSIVE' ? 'Base Amount' : 'MRP / Gross'})
+            </h3>
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium">
+            Jurisdiction: <strong>{supplyType === 'INTRA' ? (isUnionTerritory ? 'CGST + UTGST' : 'CGST + SGST') : 'IGST'}</strong>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[0, 3, 5, 12, 18, 28].map((slab) => {
+            const isCurrent = effectiveTaxRate === slab;
+            let net = 0;
+            let tax = 0;
+            let gross = 0;
+
+            if (calculationMode === 'EXCLUSIVE') {
+              net = rawInputAmount;
+              tax = (net * slab) / 100;
+              gross = net + tax;
+            } else {
+              gross = rawInputAmount;
+              net = slab > 0 ? (gross / (1 + slab / 100)) : gross;
+              tax = (net * slab) / 100;
+            }
+
+            return (
+              <div
+                key={slab}
+                onClick={() => setCustomTaxRate(slab)}
+                className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between ${
+                  isCurrent 
+                    ? 'bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20 shadow-xs' 
+                    : 'bg-slate-50/60 border-slate-200 hover:border-slate-300 hover:bg-slate-100/60'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-xs font-black font-mono ${isCurrent ? 'text-blue-700' : 'text-slate-800'}`}>
+                      {slab}% GST
+                    </span>
+                    {isCurrent && (
+                      <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    {slab === 0 ? 'Nil / Exempt' : slab === 18 ? 'Standard Benchmark' : slab === 28 ? 'Luxury / Demerit' : `${STATUTORY_SLAB_INFO[slab]?.badge || 'Slab'}`}
+                  </p>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-slate-200/60 space-y-1 font-mono text-[11px]">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>Tax:</span>
+                    <span className="font-bold text-slate-900">₹{Math.round(tax).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-600 font-bold">
+                    <span>Total:</span>
+                    <span className={isCurrent ? 'text-blue-700' : 'text-slate-900'}>₹{Math.round(gross).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1265,6 +1507,8 @@ Generated via TaxFlow Enterprise GST Rate Engine`;
           </button>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { safeStorage } from './safeStorage';
 
 export const generateBrandedPDF = (
   title: string,
@@ -11,9 +12,9 @@ export const generateBrandedPDF = (
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
-  // Fetch logo and letterhead from localStorage
-  const logo = localStorage.getItem('company_logo');
-  const letterhead = localStorage.getItem('company_letterhead');
+  // Fetch logo and letterhead from safeStorage
+  const logo = safeStorage.getItem('company_logo');
+  const letterhead = safeStorage.getItem('company_letterhead');
 
   let startY = 40;
 

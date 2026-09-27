@@ -1,6 +1,8 @@
 // Customer & Vendor Master Service
 // Handles storage, validation, GSTIN structure extraction, and filtering for Parties
 
+import { safeStorage } from '../utils/safeStorage';
+
 export type MsmeStatus = 'MICRO' | 'SMALL' | 'MEDIUM' | 'NON_MSME';
 
 export type CreditTerms = 
@@ -1075,9 +1077,9 @@ const INITIAL_VENDORS: VendorMaster[] = [
 // LocalStorage Helper Functions
 export const loadCustomers = (): CustomerMaster[] => {
   try {
-    const raw = localStorage.getItem(CUSTOMER_STORAGE_KEY);
+    const raw = safeStorage.getItem(CUSTOMER_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(INITIAL_CUSTOMERS));
+      safeStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(INITIAL_CUSTOMERS));
       return INITIAL_CUSTOMERS;
     }
     const parsed: CustomerMaster[] = JSON.parse(raw);
@@ -1086,7 +1088,7 @@ export const loadCustomers = (): CustomerMaster[] => {
       const existingIds = new Set(parsed.map(c => c.id || c.customerCode));
       const missing = INITIAL_CUSTOMERS.filter(c => !existingIds.has(c.id) && !existingIds.has(c.customerCode));
       const merged = [...parsed, ...missing];
-      localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(merged));
+      safeStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(merged));
       return merged;
     }
     return parsed;
@@ -1098,7 +1100,7 @@ export const loadCustomers = (): CustomerMaster[] => {
 
 export const saveCustomers = (customers: CustomerMaster[]) => {
   try {
-    localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(customers));
+    safeStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(customers));
   } catch (err) {
     console.error('Failed to save customers:', err);
   }
@@ -1106,9 +1108,9 @@ export const saveCustomers = (customers: CustomerMaster[]) => {
 
 export const loadVendors = (): VendorMaster[] => {
   try {
-    const raw = localStorage.getItem(VENDOR_STORAGE_KEY);
+    const raw = safeStorage.getItem(VENDOR_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(INITIAL_VENDORS));
+      safeStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(INITIAL_VENDORS));
       return INITIAL_VENDORS;
     }
     const parsed: VendorMaster[] = JSON.parse(raw);
@@ -1117,7 +1119,7 @@ export const loadVendors = (): VendorMaster[] => {
       const existingIds = new Set(parsed.map(v => v.id || v.vendorCode));
       const missing = INITIAL_VENDORS.filter(v => !existingIds.has(v.id) && !existingIds.has(v.vendorCode));
       const merged = [...parsed, ...missing];
-      localStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(merged));
+      safeStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(merged));
       return merged;
     }
     return parsed;
@@ -1129,7 +1131,7 @@ export const loadVendors = (): VendorMaster[] => {
 
 export const saveVendors = (vendors: VendorMaster[]) => {
   try {
-    localStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendors));
+    safeStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendors));
   } catch (err) {
     console.error('Failed to save vendors:', err);
   }

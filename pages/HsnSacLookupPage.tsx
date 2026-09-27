@@ -12,12 +12,15 @@ import { HSN_DIRECTORY, HSN_SECTOR_LIST } from '../data/hsnData';
 import { GOVERNMENT_NOTIFICATIONS, GST_EXEMPTIONS_CATALOG } from '../data/gstNotificationsData';
 import { HSNCode, GovernmentNotification, GstExemptionItem } from '../types';
 import { STATUTORY_SLAB_INFO } from './GstRateCalculatorPage';
+import SmartTaxRateClassifier from '../components/SmartTaxRateClassifier';
+import SmartHsnSacMatcher from '../components/SmartHsnSacMatcher';
 
 export interface RecentHsnSearchItem {
   id: string;
   query: string;
   timestamp: number;
 }
+
 
 const DEFAULT_RECENT_SEARCHES: RecentHsnSearchItem[] = [
   { id: 'sh-1', query: '8471', timestamp: Date.now() - 1000 * 60 * 15 },
@@ -35,7 +38,7 @@ const POPULAR_SEARCH_SUGGESTIONS = [
 
 export const HsnSacLookupPage: React.FC = () => {
   // Navigation tabs within HSN/SAC Center
-  const [activeTab, setActiveTab] = useState<'DIRECTORY' | 'NOTIFICATIONS' | 'EXEMPTIONS' | 'CALCULATOR'>('DIRECTORY');
+  const [activeTab, setActiveTab] = useState<'AI_MATCHER' | 'AI_CLASSIFIER' | 'DIRECTORY' | 'NOTIFICATIONS' | 'EXEMPTIONS' | 'CALCULATOR'>('AI_MATCHER');
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -383,6 +386,28 @@ ${item.rcmApplicable ? 'Reverse Charge Mechanism (RCM): YES (Recipient liable un
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 pt-6 border-t border-slate-100 mt-6 overflow-x-auto text-xs font-bold">
           <button
+            onClick={() => setActiveTab('AI_MATCHER')}
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'AI_MATCHER'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-xs'
+                : 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200'
+            }`}
+          >
+            <Sparkles size={14} className={activeTab === 'AI_MATCHER' ? 'text-white' : 'text-indigo-600'} />
+            <span>AI Code Matcher (Gemini)</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('AI_CLASSIFIER')}
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'AI_CLASSIFIER'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Percent size={14} className={activeTab === 'AI_CLASSIFIER' ? 'text-white' : 'text-indigo-600'} />
+            <span>AI Rate Classifier</span>
+          </button>
+          <button
             onClick={() => setActiveTab('DIRECTORY')}
             className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'DIRECTORY'
@@ -429,6 +454,20 @@ ${item.rcmApplicable ? 'Reverse Charge Mechanism (RCM): YES (Recipient liable un
         </div>
       </div>
 
+      {activeTab === 'AI_MATCHER' && (
+        <div className="space-y-6">
+          <SmartHsnSacMatcher initialQuery={searchQuery} />
+        </div>
+      )}
+
+      {activeTab === 'AI_CLASSIFIER' && (
+        <div className="space-y-6">
+          <SmartTaxRateClassifier />
+        </div>
+      )}
+
+      {activeTab !== 'AI_MATCHER' && activeTab !== 'AI_CLASSIFIER' && (
+      <>
       {/* 2. Top Summary KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
@@ -653,6 +692,38 @@ ${item.rcmApplicable ? 'Reverse Charge Mechanism (RCM): YES (Recipient liable un
                 )}
               </div>
             </div>
+
+            {/* AI Semantic Match Quick Action Banner */}
+            {searchQuery && searchQuery.trim().length >= 2 && (
+              <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 border border-indigo-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Sparkles size={18} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-indigo-950 flex items-center gap-2">
+                      <span>Need exact statutory classification for "{searchQuery}"?</span>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-200/70 text-indigo-800 text-[10px] font-extrabold uppercase">
+                        Gemini AI
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-indigo-800/80 mt-0.5">
+                      Intelligently match commercial trade keywords to 4/6/8-digit tariff items with General Interpretation Rules (GRI).
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('AI_MATCHER')}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Sparkles size={13} />
+                  <span>Match with Gemini AI</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
 
             {/* Faceted Filters Pill Bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
@@ -1662,6 +1733,8 @@ ${item.rcmApplicable ? 'Reverse Charge Mechanism (RCM): YES (Recipient liable un
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

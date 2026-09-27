@@ -1,6 +1,8 @@
 // GST Authentication & Token Security Management Service
 // Compliant with GSTN GSP API Specification v3.2 & RSA-2048/AES-256-GCM Security Guidelines
 
+import { safeStorage } from '../utils/safeStorage';
+
 export interface GstAuthSession {
   gstin: string;
   username: string;
@@ -92,7 +94,7 @@ export const loadGstAuthSession = (): GstAuthSession => {
   if (inMemorySession) return inMemorySession;
 
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = safeStorage.getItem(STORAGE_KEY);
     if (stored) {
       const decrypted = decryptLocalString(stored);
       const session: GstAuthSession = JSON.parse(decrypted);
@@ -129,13 +131,13 @@ export const saveGstAuthSession = (session: GstAuthSession): void => {
     try {
       const serialized = JSON.stringify(session);
       const encrypted = encryptLocalString(serialized);
-      localStorage.setItem(STORAGE_KEY, encrypted);
+      safeStorage.setItem(STORAGE_KEY, encrypted);
     } catch (e) {
       console.error('Failed to store GST auth session:', e);
     }
   } else {
     // Memory only mode -> remove from localStorage
-    localStorage.removeItem(STORAGE_KEY);
+    safeStorage.removeItem(STORAGE_KEY);
   }
 };
 
@@ -151,7 +153,7 @@ export const purgeGstAuthSession = (): GstAuthSession => {
     expiresAt: null,
   };
   inMemorySession = resetSession;
-  localStorage.removeItem(STORAGE_KEY);
+  safeStorage.removeItem(STORAGE_KEY);
   return resetSession;
 };
 

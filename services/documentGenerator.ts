@@ -1,6 +1,7 @@
 import { DocumentTemplate, ExportConfig } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { safeStorage } from '../utils/safeStorage';
 
 export const PREDEFINED_TEMPLATES: DocumentTemplate[] = [
   {
@@ -67,8 +68,8 @@ export const generateStyledDocument = (data: any, config: ExportConfig) => {
 
   // Add Letterhead or Logo from local storage
   if (config.includeLogo) {
-    const letterhead = localStorage.getItem('company_letterhead');
-    const logo = localStorage.getItem('company_logo');
+    const letterhead = safeStorage.getItem('company_letterhead');
+    const logo = safeStorage.getItem('company_logo');
 
     if (letterhead) {
       try {

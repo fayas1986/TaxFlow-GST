@@ -21,6 +21,7 @@
     "dexie-react-hooks": "^4.4.0",
     "express": "^5.2.1",
     "framer-motion": "^12.42.2",
+    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.562.0",

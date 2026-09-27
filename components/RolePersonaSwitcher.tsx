@@ -190,6 +190,33 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
       'Strictly Read-Only across all modules',
       'No access to approval workflows, calculations, filings, or settings'
     ]
+  },
+  [UserRole.CUSTOMER]: {
+    role: UserRole.CUSTOMER,
+    label: 'Client / Customer Portal',
+    shortLabel: 'Client / Customer',
+    defaultUserName: 'Ananya Sen (Client Representative)',
+    defaultEmail: 'client@acmeventures.com',
+    colorScheme: {
+      badgeBg: 'bg-teal-50',
+      badgeText: 'text-teal-700',
+      badgeBorder: 'border-teal-200',
+      accentColor: 'text-teal-600',
+      iconBg: 'bg-teal-100'
+    },
+    department: 'Client Portal & Invoicing Accounts',
+    workflowScope: 'Direct document upload, recurring invoice schedules, sales ledger view & personal notification preferences.',
+    powers: [
+      'Upload purchase/sales invoices & auto-categorize GST',
+      'Inspect issued invoices & download GST e-invoices',
+      'Review recurring invoice billing schedules',
+      'Configure personal email/SMS notification preferences & 2FA'
+    ],
+    restrictions: [
+      'No access to User Management (Super Admin exclusive)',
+      'Excluded from GSTN portal credentials, Neon database & infrastructure settings',
+      'Cannot modify corporate organization settings or global billing plans'
+    ]
   }
 };
 

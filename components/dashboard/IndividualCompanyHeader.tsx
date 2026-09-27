@@ -1,8 +1,11 @@
 import React from 'react';
-import { Tenant } from '../../types';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store/store';
+import { Tenant, UserRole } from '../../types';
+import { subscriptionManager } from '../../src/core/billing/SubscriptionManager';
 import { 
   Building2, Layers, CheckCircle2, ChevronRight, ArrowLeft, 
-  MapPin, ShieldCheck, TrendingUp, Filter, Sparkles, Building, Globe
+  MapPin, ShieldCheck, TrendingUp, Filter, Sparkles, Building, Globe, Crown
 } from 'lucide-react';
 import { OperatingCompanySwitcher } from './OperatingCompanySwitcher';
 
@@ -23,6 +26,11 @@ export const IndividualCompanyHeader: React.FC<IndividualCompanyHeaderProps> = (
   tenantStats,
   totalGroupSales
 }) => {
+  const user = useSelector((state: RootState) => state.auth.user);
+  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+  const subProfile = subscriptionManager.getUserSubscriptionProfile(user?.role, currentTenant.id);
+  const canGroup = isSuperAdmin || (subProfile.canGroupConsolidation && availableTenants.length > 1);
+
   const currentSales = tenantStats?.sales || 0;
   const calculatedSalesShare = totalGroupSales > 0 ? Math.round((currentSales / totalGroupSales) * 100) : 0;
   const salesShare = currentTenant.revenueContributionPct || calculatedSalesShare;
@@ -32,14 +40,26 @@ export const IndividualCompanyHeader: React.FC<IndividualCompanyHeaderProps> = (
       {/* Top Breadcrumb & Switch To Group Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div className="flex items-center gap-2 text-xs flex-wrap">
-          <button
-            onClick={onSwitchToGroupDashboard}
-            className="font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 transition-colors group"
-          >
-            <Layers size={14} className="text-slate-400 group-hover:text-indigo-600" />
-            <span>Group Level Dashboard</span>
-          </button>
-          <ChevronRight size={14} className="text-slate-300" />
+          {canGroup ? (
+            <>
+              <button
+                onClick={onSwitchToGroupDashboard}
+                className="font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 transition-colors group cursor-pointer"
+              >
+                <Layers size={14} className="text-slate-400 group-hover:text-indigo-600" />
+                <span>Group Level Dashboard</span>
+              </button>
+              <ChevronRight size={14} className="text-slate-300" />
+            </>
+          ) : (
+            <>
+              <span className="font-bold text-slate-500 flex items-center gap-1.5">
+                <Building2 size={14} className="text-slate-400" />
+                <span>Operating Workspace</span>
+              </span>
+              <ChevronRight size={14} className="text-slate-300" />
+            </>
+          )}
           <span className="font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
             Individual Company View
           </span>
@@ -49,13 +69,15 @@ export const IndividualCompanyHeader: React.FC<IndividualCompanyHeaderProps> = (
           </span>
         </div>
 
-        <button
-          onClick={onSwitchToGroupDashboard}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200/80 transition-all shadow-xs shrink-0"
-        >
-          <ArrowLeft size={13} />
-          <span>Back to Group Consolidated View</span>
-        </button>
+        {canGroup && (
+          <button
+            onClick={onSwitchToGroupDashboard}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200/80 transition-all shadow-xs shrink-0 cursor-pointer"
+          >
+            <ArrowLeft size={13} />
+            <span>Back to Group Consolidated View</span>
+          </button>
+        )}
       </div>
 
       {/* Main Company Identity & Scalable Operating Company Switcher */}
@@ -104,10 +126,17 @@ export const IndividualCompanyHeader: React.FC<IndividualCompanyHeaderProps> = (
                   {currentTenant.sector}
                 </span>
               )}
-              <span className="flex items-center gap-1 text-blue-700 font-bold bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100">
-                <TrendingUp size={12} />
-                {salesShare}% of Group Revenue
-              </span>
+              {canGroup ? (
+                <span className="flex items-center gap-1 text-blue-700 font-bold bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100">
+                  <TrendingUp size={12} />
+                  {salesShare}% of Group Revenue
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-slate-700 font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  <ShieldCheck size={12} className="text-emerald-600" />
+                  Primary Operating Entity (Single Org Quota)
+                </span>
+              )}
             </div>
           </div>
         </div>

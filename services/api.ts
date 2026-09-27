@@ -1,7 +1,8 @@
-import { Invoice, InvoiceItem, InvoiceVersion, ReconItem, User, UserRole, Tenant, ReconStatus, FilingRecord, ReturnFormType, EWayBill, ComplianceAlert, VendorRisk, NotificationSettings, LiabilityReportData, ItcReportData, BranchReportData, AuditLogData, TaxComputationSummary, AiRiskRecord, InvoiceReminder, AnomalyRecord, SavedReport, ImportLog, VendorActivityLog, AutomationRule, AutomationRuleCondition, AutomationRuleAction, FilingVersion, FilingDataSummary, InvoiceApprovalStatus, InvoiceApprovalWorkflow, ApprovalStageAction, ExpenseCategorySuggestion, WhatsAppMessageLog, GstDueDateItem, WhatsAppAutoReminderConfig, SendWhatsAppNotificationParams, SendWhatsAppResponse, AutomatedGstRemindersSummary, WhatsAppGatewayStatus, FilingStatusWhatsAppParams, WhatsAppClientItem } from '../types';
+import { Invoice, InvoiceItem, InvoiceVersion, ReconItem, User, UserRole, Tenant, ReconStatus, FilingRecord, ReturnFormType, EWayBill, ComplianceAlert, VendorRisk, NotificationSettings, LiabilityReportData, ItcReportData, BranchReportData, AuditLogData, AuditChange, TaxComputationSummary, AiRiskRecord, InvoiceReminder, AnomalyRecord, SavedReport, ImportLog, VendorActivityLog, AutomationRule, AutomationRuleCondition, AutomationRuleAction, FilingVersion, FilingDataSummary, InvoiceApprovalStatus, InvoiceApprovalWorkflow, ApprovalStageAction, ExpenseCategorySuggestion, WhatsAppMessageLog, GstDueDateItem, WhatsAppAutoReminderConfig, SendWhatsAppNotificationParams, SendWhatsAppResponse, AutomatedGstRemindersSummary, WhatsAppGatewayStatus, FilingStatusWhatsAppParams, WhatsAppClientItem, SmartTaxClassificationResult, BatchTaxClassificationItem, BatchTaxClassificationResponse, HsnSacMatchResult, BatchHsnMatchItem, BatchHsnMatchResponse, RecurringInvoiceProfile, RecurringPeriodTaxLiability, RecurringModuleSummary, ClientUploadedDocument, ClientDocType, DocumentCategorizationCheck } from '../types';
 import { ParsedCsvRow } from '../utils/csvImportValidator';
 import { ITCTaggingService } from './gstEngine/itcTaggingService';
 import { GSTR2BMatchingService, GSTR2BPortalRecord, GSTR2BMatchingConfig, GSTR2BMatchResultItem, GSTR2BMatchingSummary, DEFAULT_GSTR2B_MATCHING_CONFIG } from './gstEngine/gstr2bMatchingService';
+import { safeStorage } from '../utils/safeStorage';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -44,8 +45,7 @@ const STORAGE_KEYS = {
 
 const load = <T>(key: string, defaultVal: T): T => {
   try {
-    if (typeof localStorage === 'undefined') return defaultVal;
-    const stored = localStorage.getItem(key);
+    const stored = safeStorage.getItem(key);
     return stored ? JSON.parse(stored) : defaultVal;
   } catch (e) {
     return defaultVal;
@@ -54,10 +54,9 @@ const load = <T>(key: string, defaultVal: T): T => {
 
 const save = (key: string, val: any) => {
   try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(key, JSON.stringify(val));
+    safeStorage.setItem(key, JSON.stringify(val));
   } catch (e) {
-    console.error('Failed to save to local storage', e);
+    console.error('Failed to save to safeStorage', e);
   }
 };
 
@@ -76,6 +75,14 @@ let MOCK_TENANTS: Tenant[] = loadedTenants;
 
 // Mock Users
 const initialUsers: User[] = [
+  {
+    id: 'u0',
+    name: 'Platform Super Admin',
+    email: 'superadmin@taxflow.com',
+    role: UserRole.SUPER_ADMIN,
+    currentTenantId: 't1',
+    availableTenants: [...MOCK_TENANTS],
+  },
   {
     id: 'u1',
     name: 'Admin User',
@@ -110,10 +117,14 @@ const initialUsers: User[] = [
   }
 ];
 let loadedUsers: User[] = load(STORAGE_KEYS.USERS, initialUsers);
+// Ensure super admin exists if loaded from older localStorage
+if (loadedUsers && !loadedUsers.some(u => u.role === UserRole.SUPER_ADMIN)) {
+  loadedUsers = [initialUsers[0], ...loadedUsers];
+}
 if (loadedUsers && loadedUsers.length > 0 && loadedUsers[0].availableTenants?.length < ENTERPRISE_GROUP_TENANTS.length) {
   loadedUsers = loadedUsers.map(u => ({ ...u, availableTenants: [...MOCK_TENANTS] }));
-  save(STORAGE_KEYS.USERS, loadedUsers);
 }
+save(STORAGE_KEYS.USERS, loadedUsers);
 let MOCK_USERS: User[] = loadedUsers;
 
 // Mock Branches
@@ -478,12 +489,19 @@ export const createNewTenant = async (data: Omit<Tenant, 'id'>): Promise<Tenant>
 let GSTN_SESSION = { connected: false, username: '', tokenExpiry: 0 };
 
 export const performLogin = async (email: string, password: string): Promise<{ user?: User }> => {
-  await delay(1000);
-  const user = MOCK_USERS.find(u => 
-    u.email === email || (email.includes('admin') && u.role === UserRole.ADMIN) || 
-    (email.includes('auditor') && u.role === UserRole.AUDITOR) || (email.includes('accountant') && u.role === UserRole.ACCOUNTANT) ||
-    (email.includes('viewer') && u.role === UserRole.VIEWER)
-  );
+  await delay(800);
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  const user = MOCK_USERS.find(u => {
+    const userEmail = u.email.toLowerCase();
+    if (userEmail === normalizedEmail) return true;
+    if (normalizedEmail.includes('superadmin') && u.role === UserRole.SUPER_ADMIN) return true;
+    if (normalizedEmail.includes('admin') && !normalizedEmail.includes('superadmin') && u.role === UserRole.ADMIN) return true;
+    if (normalizedEmail.includes('auditor') && u.role === UserRole.AUDITOR) return true;
+    if (normalizedEmail.includes('accountant') && u.role === UserRole.ACCOUNTANT) return true;
+    if (normalizedEmail.includes('viewer') && u.role === UserRole.VIEWER) return true;
+    if (normalizedEmail.includes('finance') && u.role === UserRole.FINANCE_MANAGER) return true;
+    return false;
+  });
   if (user) return { user: { ...user } };
   throw new Error('Invalid credentials');
 };
@@ -600,17 +618,53 @@ export const updateInvoice = async (invoiceId: string, data: Partial<Invoice>, c
   const version: InvoiceVersion = {
     id: `ver-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    modifiedBy: 'Admin User',
+    modifiedBy: ACTIVE_USER?.name || 'Admin User',
     changeSummary,
     dataSnapshot: { ...oldInvoice, versionHistory: undefined }
   };
   
   newInvoice.versionHistory = [version, ...(oldInvoice.versionHistory || [])];
   
+  // Compute changed fields diff
+  const diffs: AuditChange[] = [];
+  if (data.status !== undefined && data.status !== oldInvoice.status) {
+    diffs.push({ field: 'status', fieldLabel: 'Invoice Status', oldValue: oldInvoice.status, newValue: data.status, changeType: 'STATUS_CHANGE' });
+  }
+  if (data.amount !== undefined && data.amount !== oldInvoice.amount) {
+    diffs.push({ field: 'amount', fieldLabel: 'Taxable Amount', oldValue: `₹${Number(oldInvoice.amount).toLocaleString('en-IN')}`, newValue: `₹${Number(data.amount).toLocaleString('en-IN')}`, changeType: 'MODIFIED' });
+  }
+  if (data.taxAmount !== undefined && data.taxAmount !== oldInvoice.taxAmount) {
+    diffs.push({ field: 'taxAmount', fieldLabel: 'Total Tax', oldValue: `₹${Number(oldInvoice.taxAmount).toLocaleString('en-IN')}`, newValue: `₹${Number(data.taxAmount).toLocaleString('en-IN')}`, changeType: 'MODIFIED' });
+  }
+  if (data.isBlockedItc !== undefined && data.isBlockedItc !== oldInvoice.isBlockedItc) {
+    diffs.push({ field: 'isBlockedItc', fieldLabel: 'Blocked ITC 17(5)', oldValue: oldInvoice.isBlockedItc ? 'Yes (Blocked)' : 'No (Eligible)', newValue: data.isBlockedItc ? 'Yes (Blocked)' : 'No (Eligible)', changeType: 'MODIFIED' });
+  }
+  if (data.partyName !== undefined && data.partyName !== oldInvoice.partyName) {
+    diffs.push({ field: 'partyName', fieldLabel: 'Counterparty', oldValue: oldInvoice.partyName, newValue: data.partyName, changeType: 'MODIFIED' });
+  }
+  if (data.gstin !== undefined && data.gstin !== oldInvoice.gstin) {
+    diffs.push({ field: 'gstin', fieldLabel: 'GSTIN', oldValue: oldInvoice.gstin, newValue: data.gstin, changeType: 'MODIFIED' });
+  }
+  if (data.type !== undefined && data.type !== oldInvoice.type) {
+    diffs.push({ field: 'type', fieldLabel: 'Supply Type', oldValue: oldInvoice.type, newValue: data.type, changeType: 'MODIFIED' });
+  }
+
   MOCK_INVOICES[index] = newInvoice;
   save(STORAGE_KEYS.INVOICES, MOCK_INVOICES);
   
-  await logAuditAction(`Updated Invoice: ${newInvoice.invoiceNumber}`, 'INVOICE', `Reason: ${changeSummary}`);
+  await logAuditAction(
+    `Updated Invoice: ${newInvoice.invoiceNumber}`, 
+    'INVOICE', 
+    `Reason: ${changeSummary}`,
+    diffs.length > 0 ? diffs : undefined,
+    'SUCCESS',
+    {
+      entityType: 'INVOICE',
+      entityId: newInvoice.id,
+      entityReference: newInvoice.invoiceNumber,
+      changeSummary
+    }
+  );
   
   return newInvoice;
 };
@@ -1116,7 +1170,7 @@ export const cancelEInvoice = async (invoiceId: string, reason: string, remarks:
   // Enforce official GST rule: 24h cancellation limit
   if (oldInvoice.ackDate) {
     const hoursElapsed = (Date.now() - new Date(oldInvoice.ackDate).getTime()) / (1000 * 60 * 60);
-    const bypassSim = localStorage.getItem('irp_bypass_cancellation_limit') === 'true';
+    const bypassSim = safeStorage.getItem('irp_bypass_cancellation_limit') === 'true';
     if (hoursElapsed > 24 && !bypassSim) {
       throw new Error("GST IRP Rule Violation (Code: 2142): E-Invoice cancellation is strictly limited to 24 hours after generation on the portal. Please issue a GSTR-1 Amendment or a Credit Note to revoke this transaction.");
     }
@@ -1324,7 +1378,7 @@ export interface ConsolidatedEWayBill {
 }
 
 export const fetchConsolidatedEWayBills = async (): Promise<ConsolidatedEWayBill[]> => {
-    const data = localStorage.getItem('taxflow_consolidated_ewbs');
+    const data = safeStorage.getItem('taxflow_consolidated_ewbs');
     if (!data) {
         const dummy: ConsolidatedEWayBill[] = [
             {
@@ -1338,7 +1392,7 @@ export const fetchConsolidatedEWayBills = async (): Promise<ConsolidatedEWayBill
                 transportMode: 'ROAD'
             }
         ];
-        localStorage.setItem('taxflow_consolidated_ewbs', JSON.stringify(dummy));
+        safeStorage.setItem('taxflow_consolidated_ewbs', JSON.stringify(dummy));
         return dummy;
     }
     return JSON.parse(data);
@@ -1364,7 +1418,7 @@ export const createConsolidatedEWayBill = async (
         transportMode
     };
     const updated = [newBill, ...bills];
-    localStorage.setItem('taxflow_consolidated_ewbs', JSON.stringify(updated));
+    safeStorage.setItem('taxflow_consolidated_ewbs', JSON.stringify(updated));
     await logAuditAction(`Generated Consolidated E-Way Bill ${newBill.consolidatedEwbNo} for vehicle ${vehicleNo}`, 'INVOICE');
     return newBill;
 };
@@ -2515,44 +2569,261 @@ export const logAuditAction = async (
     module: AuditLogData['module'], 
     details?: string, 
     changes?: AuditLogData['changes'],
-    status: 'SUCCESS' | 'FAILURE' = 'SUCCESS'
+    status: 'SUCCESS' | 'FAILURE' = 'SUCCESS',
+    extra?: Partial<AuditLogData>
 ) => {
     console.log(`[AUDIT] ${module}: ${action}`, details, changes);
     const lastAudit = MOCK_AUDIT_LOGS[MOCK_AUDIT_LOGS.length - 1];
     
-    const username = ACTIVE_USER?.name || 'System Auto-job';
-    const userRole = ACTIVE_USER?.role || 'SYSTEM';
-    const tenantId = ACTIVE_USER?.currentTenantId || 't1';
-    const prevHash = lastAudit?.hash || '00000000000000000000000000000000';
-    const timestamp = new Date().toISOString();
+    const username = extra?.user || ACTIVE_USER?.name || 'Fayas Ahmed';
+    const userRole = extra?.role || ACTIVE_USER?.role || 'SUPER_ADMIN';
+    const userEmail = extra?.userEmail || ACTIVE_USER?.email || 'fayasamd@gmail.com';
+    const tenantId = extra?.tenantId || ACTIVE_USER?.currentTenantId || 't1';
+    const prevHash = lastAudit?.hash || '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4';
+    const timestamp = extra?.timestamp || new Date().toISOString();
 
     // Generate cryptographic chain hash
     const inputForHash = `${action}|${module}|${username}|${userRole}|${timestamp}|${status}|${prevHash}`;
     const hash = await generateSHA256Hash(inputForHash);
 
     const newLog: AuditLogData = {
-        id: `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        id: extra?.id || `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         tenantId,
         action,
         module,
         user: username,
+        userEmail,
+        userAvatar: extra?.userAvatar,
         role: userRole,
         timestamp,
         status,
-        details,
-        changes,
+        details: details || extra?.details,
+        changes: changes || extra?.changes,
         hash,
         previousHash: prevHash,
-        ipAddress: '192.168.1.' + (100 + Math.floor(Math.random() * 155))
+        ipAddress: extra?.ipAddress || ('192.168.1.' + (100 + Math.floor(Math.random() * 155))),
+        device: extra?.device || 'Chrome / MacOS 14.5 (Workstation)',
+        entityType: extra?.entityType || (module === 'INVOICE' ? 'INVOICE' : module === 'FILING' ? 'RETURN_FILING' : undefined),
+        entityId: extra?.entityId,
+        entityReference: extra?.entityReference,
+        arn: extra?.arn,
+        period: extra?.period,
+        changeSummary: extra?.changeSummary || details,
+        metadata: extra?.metadata
     };
     
     MOCK_AUDIT_LOGS.push(newLog);
     save(STORAGE_KEYS.AUDIT_LOGS, MOCK_AUDIT_LOGS);
+    return newLog;
 };
 
 const initialAuditLogs: AuditLogData[] = [ 
-    { id: 'aud1', action: 'User Login', module: 'AUTH', user: 'Admin User', role: 'ADMIN', timestamp: '2024-11-15T09:30:00.000Z', status: 'SUCCESS', ipAddress: '192.168.1.101', hash: '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4', previousHash: '00000000000000000000000000000000' }, 
-    { id: 'aud2', action: 'Created Invoice INV-2024-1045', module: 'INVOICE', user: 'Accountant User', role: 'ACCOUNTANT', timestamp: '2024-11-15T10:15:22.000Z', status: 'SUCCESS', details: 'Value: ₹45,000', hash: '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327ab9', previousHash: '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4' }, 
+    { 
+        id: 'aud-seed-01', 
+        tenantId: 't1',
+        action: 'Created Outward B2B Invoice', 
+        module: 'INVOICE', 
+        entityType: 'INVOICE',
+        entityId: 'inv-2024-1045',
+        entityReference: 'INV-2024-1045',
+        user: 'Priya Sharma', 
+        userEmail: 'priya.sharma@taxflow.io',
+        role: 'ACCOUNTANT', 
+        timestamp: '2026-09-21T09:15:00.000Z', 
+        status: 'SUCCESS', 
+        details: 'Initial draft for Reliance Retail Ltd (GSTIN: 27AABCR1234F1Z5)', 
+        changeSummary: 'Created initial invoice record with 3 line items',
+        changes: [
+            { field: 'invoiceNumber', fieldLabel: 'Invoice Number', oldValue: null, newValue: 'INV-2024-1045', changeType: 'ADDED' },
+            { field: 'partyName', fieldLabel: 'Customer / Recipient', oldValue: null, newValue: 'Reliance Retail Ltd', changeType: 'ADDED' },
+            { field: 'amount', fieldLabel: 'Taxable Value', oldValue: null, newValue: '₹4,50,000', changeType: 'ADDED' },
+            { field: 'taxAmount', fieldLabel: 'GST Tax (18% IGST)', oldValue: null, newValue: '₹81,000', changeType: 'ADDED' },
+            { field: 'status', fieldLabel: 'Status', oldValue: null, newValue: 'DRAFT', changeType: 'STATUS_CHANGE' }
+        ],
+        ipAddress: '192.168.1.104', 
+        device: 'Chrome 128 / macOS 14.5',
+        hash: '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4', 
+        previousHash: '00000000000000000000000000000000' 
+    }, 
+    { 
+        id: 'aud-seed-02', 
+        tenantId: 't1',
+        action: 'Updated Tax Classification & SAC Code', 
+        module: 'INVOICE', 
+        entityType: 'INVOICE',
+        entityId: 'inv-2024-1045',
+        entityReference: 'INV-2024-1045',
+        user: 'Vikram Malhotra', 
+        userEmail: 'vikram.m@taxflow.io',
+        role: 'FINANCE_MANAGER', 
+        timestamp: '2026-09-22T11:42:15.000Z', 
+        status: 'SUCCESS', 
+        details: 'Corrected SAC classification per CBIC Circular 198/2026', 
+        changeSummary: 'SAC updated from 998313 to 998314 and discount applied',
+        changes: [
+            { field: 'hsnSac', fieldLabel: 'HSN/SAC Code', oldValue: '998313', newValue: '998314 (IT Consulting)', changeType: 'MODIFIED' },
+            { field: 'amount', fieldLabel: 'Taxable Value', oldValue: '₹4,50,000', newValue: '₹4,20,000', changeType: 'MODIFIED' },
+            { field: 'taxAmount', fieldLabel: 'Total Tax', oldValue: '₹81,000', newValue: '₹75,600', changeType: 'MODIFIED' }
+        ],
+        ipAddress: '192.168.1.112', 
+        device: 'Edge 128 / Windows 11',
+        hash: '9a72b83ef18f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327bc1', 
+        previousHash: '8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4' 
+    }, 
+    { 
+        id: 'aud-seed-03', 
+        tenantId: 't1',
+        action: 'Applied Section 17(5) Blocked ITC Restriction', 
+        module: 'INVOICE', 
+        entityType: 'INVOICE',
+        entityId: 'inv-2024-1076',
+        entityReference: 'INV-2024-1076',
+        user: 'Rajesh Verma', 
+        userEmail: 'rajesh.verma@auditadvisors.in',
+        role: 'AUDITOR', 
+        timestamp: '2026-09-23T14:30:45.000Z', 
+        status: 'SUCCESS', 
+        details: 'Marriott Luxury Hotel food & hospitality invoice tagged as blocked ITC', 
+        changeSummary: 'Flagged voucher as ineligible under CGST Section 17(5)(b)(i)',
+        changes: [
+            { field: 'isBlockedItc', fieldLabel: 'Blocked ITC 17(5)', oldValue: 'No (Eligible)', newValue: 'Yes (Blocked - Sec 17(5))', changeType: 'MODIFIED' },
+            { field: 'itcClaimable', fieldLabel: 'Claimable ITC', oldValue: '₹84,500', newValue: '₹0 (Ineligible)', changeType: 'MODIFIED' },
+            { field: 'expenseCategory', fieldLabel: 'Expense Category', oldValue: 'General Travel', newValue: 'Hospitality & Catering', changeType: 'MODIFIED' }
+        ],
+        ipAddress: '10.0.8.42', 
+        device: 'Chrome 128 / Linux Enterprise',
+        hash: 'c392f451a48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327dd3', 
+        previousHash: '9a72b83ef18f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327bc1' 
+    },
+    { 
+        id: 'aud-seed-04', 
+        tenantId: 't1',
+        action: 'Created GSTR-1 Auto-Draft Version v2', 
+        module: 'FILING', 
+        entityType: 'RETURN_FILING',
+        entityId: 'filing-gstr1-2026-08',
+        entityReference: 'GSTR-1 (August 2026)',
+        period: '08/2026',
+        user: 'Priya Sharma', 
+        userEmail: 'priya.sharma@taxflow.io',
+        role: 'ACCOUNTANT', 
+        timestamp: '2026-09-24T10:10:00.000Z', 
+        status: 'SUCCESS', 
+        details: 'Compiled 142 B2B invoices and 5 export shipping bills into draft', 
+        changeSummary: 'Draft version v2 generated with updated outward tax liability',
+        changes: [
+            { field: 'version', fieldLabel: 'Draft Version', oldValue: 'v1', newValue: 'v2', changeType: 'MODIFIED' },
+            { field: 'b2bCount', fieldLabel: 'B2B Supplies Count', oldValue: '138 Invoices', newValue: '142 Invoices', changeType: 'MODIFIED' },
+            { field: 'totalTaxLiability', fieldLabel: 'Total Output Tax', oldValue: '₹31,45,000', newValue: '₹34,80,000', changeType: 'MODIFIED' },
+            { field: 'status', fieldLabel: 'Filing State', oldValue: 'DRAFT', newValue: 'PRE-VALIDATION', changeType: 'STATUS_CHANGE' }
+        ],
+        ipAddress: '192.168.1.104', 
+        device: 'Chrome 128 / macOS 14.5',
+        hash: 'd483e129b48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327ee4', 
+        previousHash: 'c392f451a48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327dd3' 
+    },
+    { 
+        id: 'aud-seed-05', 
+        tenantId: 't1',
+        action: 'Approved Outward Invoices for Gateway Submission', 
+        module: 'INVOICE', 
+        entityType: 'INVOICE',
+        entityId: 'inv-2024-1089',
+        entityReference: 'INV-2024-1089',
+        user: 'Vikram Malhotra', 
+        userEmail: 'vikram.m@taxflow.io',
+        role: 'FINANCE_MANAGER', 
+        timestamp: '2026-09-24T15:20:18.000Z', 
+        status: 'SUCCESS', 
+        details: 'Sign-off on high-value B2B export voucher for Tata Consultancy Services', 
+        changeSummary: 'Invoice status escalated from PENDING_FINANCE_REVIEW to APPROVED',
+        changes: [
+            { field: 'status', fieldLabel: 'Workflow Status', oldValue: 'PENDING_FINANCE_REVIEW', newValue: 'APPROVED', changeType: 'STATUS_CHANGE' },
+            { field: 'irnGenerated', fieldLabel: 'IRN Generation Clearance', oldValue: 'PENDING', newValue: 'READY_FOR_NIC', changeType: 'MODIFIED' }
+        ],
+        ipAddress: '192.168.1.112', 
+        device: 'Edge 128 / Windows 11',
+        hash: 'e574c892a48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327ff5', 
+        previousHash: 'd483e129b48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327ee4' 
+    },
+    { 
+        id: 'aud-seed-06', 
+        tenantId: 't1',
+        action: 'Filed Return via GSTN Gateway (ARN Issued)', 
+        module: 'FILING', 
+        entityType: 'RETURN_FILING',
+        entityId: 'filing-gstr1-2026-08',
+        entityReference: 'GSTR-1 (August 2026)',
+        period: '08/2026',
+        arn: 'AA2708260194821',
+        user: 'Fayas Ahmed', 
+        userEmail: 'fayasamd@gmail.com',
+        role: 'SUPER_ADMIN', 
+        timestamp: '2026-09-24T18:45:00.000Z', 
+        status: 'SUCCESS', 
+        details: 'EVC Signed by Director (Fayas Ahmed | PAN: ABCDE1234F). GSTN ARN: AA2708260194821', 
+        changeSummary: 'Return transmitted to GSTN gateway and locked with statutory seal',
+        changes: [
+            { field: 'status', fieldLabel: 'Statutory Status', oldValue: 'PRE-VALIDATION', newValue: 'FILED', changeType: 'STATUS_CHANGE' },
+            { field: 'arn', fieldLabel: 'GSTN ARN Number', oldValue: null, newValue: 'AA2708260194821', changeType: 'ADDED' },
+            { field: 'authMode', fieldLabel: 'Signatory Verification', oldValue: 'PENDING', newValue: 'EVC Authorized (Aadhaar OTP)', changeType: 'MODIFIED' },
+            { field: 'filedDate', fieldLabel: 'Official Filing Date', oldValue: null, newValue: '2026-09-24', changeType: 'ADDED' }
+        ],
+        ipAddress: '192.168.1.101', 
+        device: 'Chrome 128 / macOS Sequoia',
+        hash: 'f695d781b48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327006', 
+        previousHash: 'e574c892a48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327ff5' 
+    },
+    { 
+        id: 'aud-seed-07', 
+        tenantId: 't1',
+        action: 'Modified GSTR-3B ITC Ledger Set-off Offset', 
+        module: 'FILING', 
+        entityType: 'RETURN_FILING',
+        entityId: 'filing-gstr3b-2026-08',
+        entityReference: 'GSTR-3B (August 2026)',
+        period: '08/2026',
+        user: 'Priya Sharma', 
+        userEmail: 'priya.sharma@taxflow.io',
+        role: 'ACCOUNTANT', 
+        timestamp: '2026-09-25T07:15:20.000Z', 
+        status: 'SUCCESS', 
+        details: 'Optimized IGST credit set-off against CGST/SGST per Rule 88A', 
+        changeSummary: 'Adjusted ITC utilization sequence to maximize cash conservation',
+        changes: [
+            { field: 'igstSetOff', fieldLabel: 'IGST Credit Set-Off', oldValue: '₹14,50,000', newValue: '₹18,20,000', changeType: 'MODIFIED' },
+            { field: 'cgstCashPayable', fieldLabel: 'CGST Cash Ledger', oldValue: '₹3,20,000', newValue: '₹1,35,000', changeType: 'MODIFIED' },
+            { field: 'netCashPaid', fieldLabel: 'Net Cash Outflow', oldValue: '₹6,40,000', newValue: '₹2,70,000', changeType: 'MODIFIED' }
+        ],
+        ipAddress: '192.168.1.104', 
+        device: 'Chrome 128 / macOS 14.5',
+        hash: 'a126e892c48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327117', 
+        previousHash: 'f695d781b48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327006' 
+    },
+    { 
+        id: 'aud-seed-08', 
+        tenantId: 't1',
+        action: 'Updated Invoice Status to Disputed (Mismatch)', 
+        module: 'INVOICE', 
+        entityType: 'INVOICE',
+        entityId: 'inv-2024-1052',
+        entityReference: 'INV-2024-1052',
+        user: 'Rajesh Verma', 
+        userEmail: 'rajesh.verma@auditadvisors.in',
+        role: 'AUDITOR', 
+        timestamp: '2026-09-25T08:02:10.000Z', 
+        status: 'SUCCESS', 
+        details: 'GSTR-2B reconciliation mismatch flagged: supplier invoice missing from 2B table 3(a)', 
+        changeSummary: 'Invoice placed in exception queue pending vendor upload verification',
+        changes: [
+            { field: 'status', fieldLabel: 'Audit Status', oldValue: 'PENDING_APPROVAL', newValue: 'RECONCILIATION_MISMATCH', changeType: 'STATUS_CHANGE' },
+            { field: 'reconciliationNote', fieldLabel: 'Auditor Note', oldValue: null, newValue: 'Missing in GSTR-2B; supplier notification triggered', changeType: 'ADDED' }
+        ],
+        ipAddress: '10.0.8.42', 
+        device: 'Chrome 128 / Linux Enterprise',
+        hash: 'b237f903d48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327228', 
+        previousHash: 'a126e892c48f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327117' 
+    }
 ];
 
 let MOCK_AUDIT_LOGS: AuditLogData[] = load(STORAGE_KEYS.AUDIT_LOGS, initialAuditLogs);
@@ -3488,3 +3759,303 @@ export const translateDocumentText = async (text: string, targetLanguage: string
   }
   return response.json();
 };
+
+export const classifyTaxRate = async (params: {
+  description: string;
+  price?: number;
+  isInterstate?: boolean;
+  b2b?: boolean;
+  context?: string;
+  customNote?: string;
+}): Promise<SmartTaxClassificationResult> => {
+  const response = await fetch('/api/ai/classify-tax-rate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Classification request failed' }));
+    throw new Error(error.error || 'Failed to classify tax rate');
+  }
+  return response.json();
+};
+
+export const batchClassifyTaxRates = async (
+  items: BatchTaxClassificationItem[]
+): Promise<BatchTaxClassificationResponse> => {
+  const response = await fetch('/api/ai/batch-classify-tax-rate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items })
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Batch classification request failed' }));
+    throw new Error(error.error || 'Failed to batch classify tax rates');
+  }
+  return response.json();
+};
+
+export const matchHsnSacCode = async (params: {
+  description: string;
+  categoryPreference?: 'ALL' | 'GOODS' | 'SERVICES';
+  turnoverBracket?: 'UNDER_5CR' | 'ABOVE_5CR' | 'EXPORTS';
+  context?: any;
+}): Promise<HsnSacMatchResult> => {
+  const response = await fetch('/api/ai/match-hsn-sac', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'HSN/SAC matching request failed' }));
+    throw new Error(error.error || 'Failed to match HSN/SAC code');
+  }
+  return response.json();
+};
+
+export const batchMatchHsnSacCodes = async (
+  items: BatchHsnMatchItem[],
+  turnoverBracket: 'UNDER_5CR' | 'ABOVE_5CR' | 'EXPORTS' = 'ABOVE_5CR'
+): Promise<BatchHsnMatchResponse> => {
+  const response = await fetch('/api/ai/batch-match-hsn-sac', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items, turnoverBracket })
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Batch HSN/SAC matching request failed' }));
+    throw new Error(error.error || 'Failed to batch match HSN/SAC codes');
+  }
+  return response.json();
+};
+
+// =========================================================================
+// RECURRING INVOICES & AUTOMATED TAX LIABILITY API METHODS
+// =========================================================================
+
+export const getRecurringProfiles = async (params?: {
+  status?: string;
+  frequency?: string;
+  search?: string;
+}): Promise<{ success: boolean; count: number; profiles: RecurringInvoiceProfile[] }> => {
+  const query = new URLSearchParams();
+  if (params?.status && params.status !== 'ALL') query.set('status', params.status);
+  if (params?.frequency && params.frequency !== 'ALL') query.set('frequency', params.frequency);
+  if (params?.search) query.set('search', params.search);
+
+  const url = `/api/recurring-invoices${query.toString() ? `?${query.toString()}` : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to fetch recurring profiles' }));
+    throw new Error(err.error || 'Failed to fetch recurring profiles');
+  }
+  return res.json();
+};
+
+export const getRecurringProfileById = async (id: string): Promise<RecurringInvoiceProfile> => {
+  const res = await fetch(`/api/recurring-invoices/${id}`);
+  if (!res.ok) throw new Error('Recurring profile not found');
+  return res.json();
+};
+
+export const createRecurringProfile = async (
+  data: Partial<RecurringInvoiceProfile>
+): Promise<{ success: boolean; profile: RecurringInvoiceProfile; message: string }> => {
+  const res = await fetch('/api/recurring-invoices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to create recurring profile' }));
+    throw new Error(err.error || 'Failed to create recurring profile');
+  }
+  return res.json();
+};
+
+export const updateRecurringProfile = async (
+  id: string,
+  data: Partial<RecurringInvoiceProfile>
+): Promise<{ success: boolean; profile: RecurringInvoiceProfile; message: string }> => {
+  const res = await fetch(`/api/recurring-invoices/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to update recurring profile' }));
+    throw new Error(err.error || 'Failed to update recurring profile');
+  }
+  return res.json();
+};
+
+export const deleteRecurringProfile = async (id: string): Promise<{ success: boolean; message: string }> => {
+  const res = await fetch(`/api/recurring-invoices/${id}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error('Failed to delete recurring profile');
+  return res.json();
+};
+
+export const triggerRecurringInvoice = async (
+  id: string,
+  date?: string
+): Promise<{ success: boolean; message: string; invoice: any; executionLog: any; updatedProfile: RecurringInvoiceProfile }> => {
+  const res = await fetch(`/api/recurring-invoices/${id}/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to generate recurring invoice' }));
+    throw new Error(err.error || 'Failed to generate recurring invoice');
+  }
+  return res.json();
+};
+
+export const batchGenerateRecurringInvoices = async (): Promise<{
+  success: boolean;
+  batchCount: number;
+  totalTaxableGenerated: number;
+  totalTaxLiabilityGenerated: number;
+  invoices: any[];
+}> => {
+  const res = await fetch('/api/recurring-invoices/batch-generate', {
+    method: 'POST'
+  });
+  if (!res.ok) throw new Error('Failed to process batch recurring generation');
+  return res.json();
+};
+
+export const getRecurringTaxLiabilityProjection = async (): Promise<{
+  success: boolean;
+  monthlyLiabilityProjections: RecurringPeriodTaxLiability[];
+  quarterlyLiabilityProjections: any[];
+}> => {
+  const res = await fetch('/api/recurring-invoices/tax-liability-projection');
+  if (!res.ok) throw new Error('Failed to fetch tax liability projections');
+  return res.json();
+};
+
+export const getRecurringModuleSummary = async (): Promise<RecurringModuleSummary> => {
+  const res = await fetch('/api/recurring-invoices/summary');
+  if (!res.ok) throw new Error('Failed to fetch recurring summary');
+  return res.json();
+};
+
+// =========================================================================
+// CLIENT DOCUMENT UPLOAD & AUTOMATED GST CATEGORIZATION API
+// =========================================================================
+
+export const fetchClientDocuments = async (params?: {
+  clientId?: string;
+  clientGstin?: string;
+  documentType?: string;
+  status?: string;
+  period?: string;
+  search?: string;
+}): Promise<{ success: boolean; count: number; documents: ClientUploadedDocument[] }> => {
+  const query = new URLSearchParams();
+  if (params?.clientId) query.set('clientId', params.clientId);
+  if (params?.clientGstin) query.set('clientGstin', params.clientGstin);
+  if (params?.documentType) query.set('documentType', params.documentType);
+  if (params?.status) query.set('status', params.status);
+  if (params?.period) query.set('period', params.period);
+  if (params?.search) query.set('search', params.search);
+
+  const res = await fetch(`/api/client-documents?${query.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch client documents');
+  return res.json();
+};
+
+export const fetchClientDocumentById = async (id: string): Promise<ClientUploadedDocument> => {
+  const res = await fetch(`/api/client-documents/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch client document');
+  return res.json();
+};
+
+export const previewCategorizeClientDocument = async (payload: {
+  documentType: ClientDocType;
+  fileName?: string;
+  rawText?: string;
+  description?: string;
+  claimedTaxRate?: number;
+  lineItems?: Array<{ description: string; hsnSac?: string; taxableValue?: number; taxRate?: number; quantity?: number; rate?: number }>;
+  clientStateCode?: string;
+  placeOfSupply?: string;
+}): Promise<{
+  categorization: DocumentCategorizationCheck;
+  parsedItems: any[];
+  discrepancies: string[];
+}> => {
+  const res = await fetch('/api/client-documents/categorize-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to run categorization check' }));
+    throw new Error(err.error || 'Failed to run categorization check');
+  }
+  return res.json();
+};
+
+export const uploadAndCategorizeClientDocument = async (payload: {
+  clientId: string;
+  clientName: string;
+  clientGstin: string;
+  clientStateCode?: string;
+  documentType: ClientDocType;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  fileDataUrl?: string;
+  financialPeriod?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  counterpartyName?: string;
+  counterpartyGstin?: string;
+  placeOfSupply?: string;
+  description?: string;
+  rawText?: string;
+  claimedTaxRate?: number;
+  lineItems?: Array<{ description: string; hsnSac?: string; taxableValue?: number; taxRate?: number; quantity?: number; rate?: number }>;
+  notes?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  document: ClientUploadedDocument;
+}> => {
+  const res = await fetch('/api/client-documents/upload-categorize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to upload and categorize document' }));
+    throw new Error(err.error || 'Failed to upload and categorize document');
+  }
+  return res.json();
+};
+
+export const verifyAndPushClientDocument = async (id: string): Promise<{
+  success: boolean;
+  message: string;
+  document: ClientUploadedDocument;
+}> => {
+  const res = await fetch(`/api/client-documents/${id}/verify-push`, {
+    method: 'POST'
+  });
+  if (!res.ok) throw new Error('Failed to verify and push document');
+  return res.json();
+};
+
+export const deleteClientDocument = async (id: string): Promise<{ success: boolean; message: string }> => {
+  const res = await fetch(`/api/client-documents/${id}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error('Failed to delete client document');
+  return res.json();
+};
+
+

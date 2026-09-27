@@ -25,14 +25,17 @@ import {
   AlertTriangle,
   ChevronLeft,
   ShieldCheck,
-  Download
+  Download,
+  History
 } from 'lucide-react';
 import TamperProofExportModal from '../components/TamperProofExportModal';
+import { ComplianceAuditLog } from '../components/ComplianceAuditLog';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const AuditLogs: React.FC = () => {
   const user = useSelector((state: RootState) => state.auth.user);
+  const [activeTab, setActiveTab] = useState<'COMPLIANCE_TRAIL' | 'SYSTEM_LEDGER'>('COMPLIANCE_TRAIL');
   const [logs, setLogs] = useState<AuditLogData[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -317,48 +320,81 @@ const AuditLogs: React.FC = () => {
   return (
     <div className="space-y-8 max-w-7xl mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-500 uppercase tracking-widest">
-            <Shield size={14} className="text-blue-500" />
-            Compliance & Controls
-          </div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight mt-1">System Audit Ledger</h2>
-          <p className="text-slate-500 mt-2 text-base">
-            Tamper-evident cryptographic ledger recording operations, organizational adjustments, and user authentications.
-          </p>
-        </div>
-        
-        {/* Verification & Export Trigger Buttons */}
-        <div className="flex flex-wrap items-center gap-3 self-start md:self-center">
+      {/* Top Navigation Mode Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-slate-200">
+        <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200 shadow-xs">
           <button
-            onClick={() => setIsExportModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-extrabold text-sm rounded-xl transition-all shadow-md shadow-indigo-500/20 hover:shadow-indigo-500/30 active:scale-95"
+            onClick={() => setActiveTab('COMPLIANCE_TRAIL')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'COMPLIANCE_TRAIL'
+                ? 'bg-white text-indigo-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <ShieldCheck size={16} />
-            Export Tamper-Proof Package
+            <History size={14} className="text-indigo-600" />
+            <span>Compliance Audit Log (Invoices & Filings)</span>
           </button>
 
           <button
-            onClick={runIntegrityVerification}
-            disabled={checkingIntegrity || logs.length === 0}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg disabled:shadow-none"
+            onClick={() => setActiveTab('SYSTEM_LEDGER')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'SYSTEM_LEDGER'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <Lock size={15} className={checkingIntegrity ? 'animate-spin' : ''} />
-            {checkingIntegrity ? 'Verifying Ledger...' : 'Verify Cryptographic Chain'}
-          </button>
-          
-          <button
-            onClick={loadLogs}
-            disabled={loading}
-            className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all shadow-sm"
-            title="Refresh logs"
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            <Shield size={14} className="text-slate-500" />
+            <span>System & Security Ledger</span>
           </button>
         </div>
       </div>
+
+      {activeTab === 'COMPLIANCE_TRAIL' ? (
+        <ComplianceAuditLog />
+      ) : (
+        <div className="space-y-8">
+          {/* Page Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-500 uppercase tracking-widest">
+                <Shield size={14} className="text-blue-500" />
+                Compliance & Controls
+              </div>
+              <h2 className="text-3xl font-black text-slate-800 tracking-tight mt-1">System Audit Ledger</h2>
+              <p className="text-slate-500 mt-2 text-base">
+                Tamper-evident cryptographic ledger recording operations, organizational adjustments, and user authentications.
+              </p>
+            </div>
+            
+            {/* Verification & Export Trigger Buttons */}
+            <div className="flex flex-wrap items-center gap-3 self-start md:self-center">
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-extrabold text-sm rounded-xl transition-all shadow-md shadow-indigo-500/20 hover:shadow-indigo-500/30 active:scale-95"
+              >
+                <ShieldCheck size={16} />
+                Export Tamper-Proof Package
+              </button>
+
+              <button
+                onClick={runIntegrityVerification}
+                disabled={checkingIntegrity || logs.length === 0}
+                className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg disabled:shadow-none"
+              >
+                <Lock size={15} className={checkingIntegrity ? 'animate-spin' : ''} />
+                {checkingIntegrity ? 'Verifying Ledger...' : 'Verify Cryptographic Chain'}
+              </button>
+              
+              <button
+                onClick={loadLogs}
+                disabled={loading}
+                className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all shadow-sm"
+                title="Refresh logs"
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </div>
 
       {/* Chain Status Integrity Banner */}
       {integrityStatus !== 'IDLE' && (
@@ -881,6 +917,9 @@ const AuditLogs: React.FC = () => {
         logs={sortedLogs}
         tenantId={user?.currentTenantId || 't1'}
       />
+
+        </div>
+      )}
 
     </div>
   );

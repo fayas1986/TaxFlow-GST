@@ -1,4 +1,6 @@
 import React, { useState, useRef } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store/store';
 import { 
   Users, 
   ShieldCheck, 
@@ -350,6 +352,27 @@ const DEFAULT_ROLE_MATRICES: RolePermissionMatrix[] = [
         DELETE: false,
         APPROVE: false,
         EXPORT: false,
+        ADMIN: false
+      }
+    }))
+  },
+  {
+    role: UserRole.CUSTOMER,
+    roleName: 'Customer / Client',
+    description: 'External customer portal: Upload purchase/sales documents, inspect sales invoices, track recurring schedules, and personal preferences.',
+    color: 'from-teal-600 to-cyan-700',
+    badgeBg: 'bg-teal-100 text-teal-800 border-teal-200',
+    modules: SYSTEM_MODULES.map(m => ({
+      moduleKey: m.key,
+      moduleName: m.name,
+      description: m.description,
+      actions: {
+        VIEW: ['INVOICES', 'REPORTS'].includes(m.key),
+        CREATE: ['INVOICES'].includes(m.key),
+        EDIT: false,
+        DELETE: false,
+        APPROVE: false,
+        EXPORT: ['INVOICES', 'REPORTS'].includes(m.key),
         ADMIN: false
       }
     }))
@@ -1271,6 +1294,26 @@ const UserAccessManagement: React.FC<UserAccessManagementProps> = ({ currentTena
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
+
+  const currentUser = useSelector((state: RootState) => state.auth.user);
+  const isSuperAdmin = currentUser?.role === UserRole.SUPER_ADMIN;
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center max-w-xl mx-auto my-8 shadow-sm">
+        <div className="w-14 h-14 bg-rose-50 rounded-2xl border border-rose-200 flex items-center justify-center mx-auto mb-4 text-rose-600">
+          <Shield size={26} />
+        </div>
+        <span className="px-3 py-1 bg-rose-50 text-rose-700 text-xs font-black uppercase tracking-wider rounded-full border border-rose-200">
+          Super Admin Only
+        </span>
+        <h3 className="text-xl font-bold text-slate-800 mt-3">Restricted Administrative Area</h3>
+        <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+          User Management and access control matrix are exclusively reserved for Super Administrators and are not accessible by customers.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 w-full min-w-0">

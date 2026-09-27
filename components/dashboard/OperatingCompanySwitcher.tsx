@@ -157,6 +157,10 @@ export const OperatingCompanySwitcher: React.FC<OperatingCompanySwitcherProps> =
     return 'bg-slate-100 text-slate-700 border-slate-200';
   };
 
+  if (!availableTenants || availableTenants.length <= 1) {
+    return null;
+  }
+
   return (
     <div className={`relative inline-block ${className}`}>
       {/* Label and Quick-Switch Bar */}

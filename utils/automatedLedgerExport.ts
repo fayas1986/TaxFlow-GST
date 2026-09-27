@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { safeStorage } from './safeStorage';
 
 export interface LedgerExportPolicy {
   enabled: boolean;
@@ -218,7 +219,7 @@ export function getDefaultLedgerExportPolicy(): LedgerExportPolicy {
  */
 export function getLedgerExportPolicy(): LedgerExportPolicy {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_POLICY);
+    const raw = safeStorage.getItem(STORAGE_KEY_POLICY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return { ...getDefaultLedgerExportPolicy(), ...parsed };
@@ -240,7 +241,7 @@ export function saveLedgerExportPolicy(policy: Partial<LedgerExportPolicy>): Led
     nextScheduledDate: calculateNextScheduledDate(policy.dayOfMonth ?? current.dayOfMonth)
   };
   try {
-    localStorage.setItem(STORAGE_KEY_POLICY, JSON.stringify(updated));
+    safeStorage.setItem(STORAGE_KEY_POLICY, JSON.stringify(updated));
   } catch (e) {
     console.warn('Error saving export policy:', e);
   }
@@ -252,7 +253,7 @@ export function saveLedgerExportPolicy(policy: Partial<LedgerExportPolicy>): Led
  */
 export function getLedgerArchiveHistory(): LedgerArchiveRecord[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
+    const raw = safeStorage.getItem(STORAGE_KEY_HISTORY);
     if (raw) {
       const parsed: LedgerArchiveRecord[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length >= 10) {
@@ -658,7 +659,7 @@ export function getLedgerArchiveHistory(): LedgerArchiveRecord[] {
   ];
 
   try {
-    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(defaultHistory));
+    safeStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(defaultHistory));
   } catch {
     // ignore
   }
@@ -673,7 +674,7 @@ export function recordLedgerArchiveHistory(record: LedgerArchiveRecord): LedgerA
   const filtered = history.filter(h => h.id !== record.id);
   const updated = [record, ...filtered].slice(0, 36); // Keep up to 36 months history
   try {
-    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(updated));
+    safeStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(updated));
   } catch (e) {
     console.warn('Error recording archive history:', e);
   }
@@ -1253,7 +1254,7 @@ export async function downloadHistoricalSnapshotArchive(
     }
     return item;
   });
-  localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(updatedHistory));
+  safeStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(updatedHistory));
 
   return { success: true, filename: record.filename };
 }

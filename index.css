@@ -2,12 +2,28 @@
 html {
   /* Fluid base font size: dynamically scales 'rem' from 13px on small screens up to 16px on desktops */
   font-size: clamp(13px, 0.8125rem + 0.3vw, 16px);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* High Performance GPU Acceleration Utilities */
+.gpu-accel {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Content Visibility Optimization for Ultra-Fast List/Table Rendering */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 400px;
 }
 
 /* Corporate Theme Global CSS */
 @layer utilities {
   .bg-corporate-gradient {
-    background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    background: linear-gradient(135deg, #090D16 0%, #0F172A 100%);
   }
   .bg-executive-header {
     background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%);
@@ -15,27 +31,47 @@ html {
   .bg-soft-gradient {
     background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
   }
+  .bg-indigo-glow {
+    background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  }
 }
 
-/* Card Styling */
+/* Card Styling with Modernized Elevation & Fast Transitions */
 .card-corporate {
   background-color: #ffffff;
   border-radius: 0.875rem;
   border: 1px solid #E2E8F0;
   box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  /* Prevent text overflow and overlaps */
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
   overflow-wrap: break-word;
   word-wrap: break-word;
-  hyphens: auto;
 }
 
 .card-corporate:hover {
   border-color: #CBD5E1;
-  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 6px 16px -3px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.03);
 }
 
-/* Badge Utilities */
+/* Modern Input Styling */
+.input-corporate {
+  height: 2.5rem;
+  padding: 0 0.875rem;
+  background-color: #ffffff;
+  color: #0F172A;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: all 0.15s ease-in-out;
+  outline: none;
+}
+
+.input-corporate:focus {
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+/* Badge Utilities with High-Contrast Text */
 .badge-corporate {
   display: inline-flex;
   align-items: center;
@@ -67,15 +103,15 @@ html {
 }
 
 .badge-info {
-  background-color: #F0F9FF;
-  color: #0369A1;
-  border: 1px solid #BAE6FD;
+  background-color: #EEF2FF;
+  color: #4338CA;
+  border: 1px solid #C7D2FE;
 }
 
 .badge-neutral {
   background-color: #F1F5F9;
   color: #334155;
-  border: 1px solid #CBD5E1;
+  border: 1px solid #E2E8F0;
 }
 
 /* Interactive Buttons */
@@ -84,29 +120,39 @@ html {
   color: #ffffff;
   font-weight: 700;
   padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
+  border-radius: 0.75rem;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  transition: all 0.15s ease-in-out;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .btn-primary-corporate:hover {
   background-color: #1E293B;
   transform: translateY(-1px);
+  box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.12);
 }
 
 .btn-brand-corporate {
-  background-color: #1E40AF;
+  background-color: #4F46E5;
   color: #ffffff;
   font-weight: 700;
   padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px 0 rgba(30, 64, 175, 0.2);
-  transition: all 0.15s ease-in-out;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(79, 70, 229, 0.25);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .btn-brand-corporate:hover {
-  background-color: #1D4ED8;
+  background-color: #4338CA;
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgba(79, 70, 229, 0.35);
 }
 
 /* Custom Scrollbar Utilities */
@@ -165,6 +211,31 @@ html {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 1);
+}
+
+/* Table Corporate Styling */
+.table-corporate th {
+  background-color: #F8FAFC;
+  color: #475569;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #E2E8F0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table-corporate td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #F1F5F9;
+  font-size: 0.8125rem;
+}
+
+.table-corporate tr:hover td {
+  background-color: #F8FAFC;
 }
 
 /* Print Optimization Styles */

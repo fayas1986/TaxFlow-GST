@@ -7,6 +7,7 @@ import {
   GSTR2BMatchResultItem,
   GSTR2BPortalRecord
 } from './gstEngine/gstr2bMatchingService';
+import { safeStorage } from '../utils/safeStorage';
 
 export interface ReconciliationDraftData {
   version: number;
@@ -64,8 +65,8 @@ export class ReconciliationAutoSaveService {
       const sizeKb = Math.round((serialized.length * 2) / 1024);
 
       try {
-        localStorage.setItem(key, serialized);
-        localStorage.setItem(`${STORAGE_PREFIX}latest_key`, key);
+        safeStorage.setItem(key, serialized);
+        safeStorage.setItem(`${STORAGE_PREFIX}latest_key`, key);
       } catch (storageErr: any) {
         // If quota exceeded due to large volume of invoices, save without raw items or compact format
         if (storageErr?.name === 'QuotaExceededError' || storageErr?.code === 22) {
@@ -76,7 +77,7 @@ export class ReconciliationAutoSaveService {
             gstr2bRecords: fullDraft.gstr2bRecords.slice(0, 500),
             results: fullDraft.results.slice(0, 500)
           };
-          localStorage.setItem(key, JSON.stringify(trimmedDraft));
+          safeStorage.setItem(key, JSON.stringify(trimmedDraft));
         } else {
           throw storageErr;
         }
@@ -88,7 +89,7 @@ export class ReconciliationAutoSaveService {
         sizeKb
       };
     } catch (err: any) {
-      console.error('Failed to auto-save reconciliation draft to localStorage:', err);
+      console.error('Failed to auto-save reconciliation draft to safeStorage:', err);
       return {
         success: false,
         timestamp: '',
@@ -104,13 +105,13 @@ export class ReconciliationAutoSaveService {
   public static loadDraft(tenantGstin: string, period: string): ReconciliationDraftData | null {
     try {
       const key = this.getStorageKey(tenantGstin, period);
-      const raw = localStorage.getItem(key);
+      const raw = safeStorage.getItem(key);
       if (!raw) return null;
 
       const parsed: ReconciliationDraftData = JSON.parse(raw);
       return parsed;
     } catch (err) {
-      console.error('Failed to load reconciliation draft from localStorage:', err);
+      console.error('Failed to load reconciliation draft from safeStorage:', err);
       return null;
     }
   }
@@ -120,7 +121,7 @@ export class ReconciliationAutoSaveService {
    */
   public static hasDraft(tenantGstin: string, period: string): boolean {
     const key = this.getStorageKey(tenantGstin, period);
-    return Boolean(localStorage.getItem(key));
+    return Boolean(safeStorage.getItem(key));
   }
 
   /**
@@ -129,9 +130,9 @@ export class ReconciliationAutoSaveService {
   public static clearDraft(tenantGstin: string, period: string): void {
     try {
       const key = this.getStorageKey(tenantGstin, period);
-      localStorage.removeItem(key);
+      safeStorage.removeItem(key);
     } catch (err) {
-      console.error('Failed to remove draft from localStorage:', err);
+      console.error('Failed to remove draft from safeStorage:', err);
     }
   }
 
@@ -141,10 +142,13 @@ export class ReconciliationAutoSaveService {
   public static listDrafts(): Array<{ key: string; period: string; tenantGstin: string; lastSavedAt: string; itemCount: number; step: number }> {
     const drafts: Array<{ key: string; period: string; tenantGstin: string; lastSavedAt: string; itemCount: number; step: number }> = [];
     try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
+      if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+        return [];
+      }
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
         if (k && k.startsWith(STORAGE_PREFIX) && !k.endsWith('latest_key')) {
-          const raw = localStorage.getItem(k);
+          const raw = safeStorage.getItem(k);
           if (raw) {
             try {
               const d = JSON.parse(raw);

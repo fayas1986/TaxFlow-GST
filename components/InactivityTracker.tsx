@@ -191,60 +191,60 @@ const InactivityTracker: React.FC = () => {
       {/* Inactivity Warning Modal */}
       <AnimatePresence>
         {showWarning && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+          <div className="fixed inset-0 z-[9999] overflow-y-auto p-3 sm:p-4 flex min-h-screen items-center justify-center bg-slate-950/75 backdrop-blur-md">
             <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200"
+              className="w-full max-w-md bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[94vh]"
             >
               {/* Top Security Banner */}
-              <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white px-6 py-3.5 flex items-center justify-between text-xs font-bold">
+              <div className="shrink-0 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between text-xs font-bold">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert size={16} className="animate-pulse" />
-                  <span className="uppercase tracking-wider">Inactivity Security Alert</span>
+                  <ShieldAlert size={15} className="animate-pulse" />
+                  <span className="uppercase tracking-wider text-[11px] sm:text-xs">Inactivity Security Alert</span>
                 </div>
-                <span className="font-mono bg-black/20 px-2.5 py-0.5 rounded-full text-[10px] text-amber-100 border border-amber-300/30">
+                <span className="font-mono bg-black/20 px-2 py-0.5 rounded-full text-[10px] text-amber-100 border border-amber-300/30 truncate max-w-[140px]">
                   User: {user?.name || 'Active User'}
                 </span>
               </div>
 
-              <div className="p-8 flex flex-col items-center text-center">
-                <div className="relative mb-6">
-                  <div className={`w-20 h-20 rounded-3xl flex items-center justify-center shadow-lg transition-colors duration-300 ${
-                    remainingSeconds <= 15 ? 'bg-rose-50 text-rose-600 border border-rose-200 ring-8 ring-rose-50/50' :
-                    remainingSeconds <= 30 ? 'bg-amber-50 text-amber-600 border border-amber-200 ring-8 ring-amber-50/50' :
-                    'bg-blue-50 text-blue-600 border border-blue-200 ring-8 ring-blue-50/50'
+              <div className="p-4 sm:p-6 flex flex-col items-center text-center overflow-y-auto space-y-3">
+                {/* Header Icon & Title Group */}
+                <div className="flex items-center gap-3 w-full text-left bg-slate-50/80 p-3 rounded-2xl border border-slate-200/80">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-xs shrink-0 transition-colors duration-300 ${
+                    remainingSeconds <= 15 ? 'bg-rose-100 text-rose-600 border border-rose-200 ring-2 ring-rose-200' :
+                    remainingSeconds <= 30 ? 'bg-amber-100 text-amber-700 border border-amber-200 ring-2 ring-amber-200' :
+                    'bg-blue-100 text-blue-700 border border-blue-200 ring-2 ring-blue-200'
                   }`}>
-                    <Clock size={40} className={remainingSeconds <= 15 ? 'animate-bounce' : ''} />
+                    <Clock size={24} className={remainingSeconds <= 15 ? 'animate-bounce' : ''} />
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-slate-900 text-white rounded-full flex items-center justify-center border-2 border-white font-mono text-[11px] font-bold shadow-xs">
-                    {warningDurationSec}s
+                  <div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight leading-tight">
+                      Are You Still There?
+                    </h3>
+                    <p className="text-xs font-bold text-amber-700 flex items-center gap-1 mt-0.5">
+                      <Clock size={13} /> Session Timing Out in <span className="font-mono font-black text-slate-900 bg-amber-200/70 px-1.5 py-0.2 rounded">{remainingSeconds}s</span>
+                    </p>
                   </div>
                 </div>
                 
-                <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                  Are You Still There?
-                </h3>
-                <p className="text-sm font-bold text-amber-600 mt-1 flex items-center gap-1.5">
-                  <Clock size={16} /> Session Timing Out in <span className="font-mono text-base font-extrabold">{remainingSeconds}s</span>
-                </p>
-                
-                <p className="text-slate-600 text-xs font-medium mt-2 max-w-md leading-relaxed">
-                  You have been inactive for over <strong>{activePolicy.inactivityTimeoutMinutes} minutes</strong>. For your security, your session will automatically log out soon unless you choose to stay connected.
+                <p className="text-slate-600 text-xs font-medium max-w-sm leading-relaxed text-left sm:text-center">
+                  You have been inactive for over <strong>{activePolicy.inactivityTimeoutMinutes} minutes</strong>. Choose to stay connected to keep working.
                 </p>
 
                 {/* Password Re-auth Field if required by department policy */}
                 {activePolicy.enforcePasswordReauth && (
-                  <div className="w-full mt-4 p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-left space-y-2">
+                  <div className="w-full p-3 bg-amber-50/90 rounded-xl border border-amber-200 text-left space-y-1.5">
                     <div className="flex items-center justify-between text-xs font-extrabold text-amber-900">
-                      <span className="flex items-center gap-1.5">
-                        <Lock size={14} className="text-amber-600" /> Security Re-Authentication Required
+                      <span className="flex items-center gap-1.5 text-[11px]">
+                        <Lock size={13} className="text-amber-600" /> Security Password Required
                       </span>
-                      <span className="text-[10px] font-mono text-amber-700">Policy: {activePolicy.departmentName}</span>
+                      <span className="text-[9px] font-mono text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded truncate max-w-[120px]">
+                        Policy: {activePolicy.departmentName}
+                      </span>
                     </div>
-                    <p className="text-[11px] text-amber-800">Department security policy requires password confirmation to extend session.</p>
                     <div className="relative">
                       <input
                         type="password"
@@ -254,52 +254,47 @@ const InactivityTracker: React.FC = () => {
                           setAuthError('');
                         }}
                         placeholder="Enter password or Security PIN..."
-                        className="w-full px-3.5 py-2 text-xs bg-white border border-amber-300 rounded-xl font-mono text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                        className="w-full px-3 py-2 text-xs bg-white border border-amber-300 rounded-lg font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
                     </div>
                     {authError && (
-                      <p className="text-[11px] text-rose-600 font-bold">{authError}</p>
+                      <p className="text-[10px] text-rose-600 font-bold">{authError}</p>
                     )}
                   </div>
                 )}
 
                 {/* Data Protection Guarantee Notice Box */}
-                <div className="w-full mt-4 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-left flex items-start gap-3">
-                  <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl shrink-0 mt-0.5">
-                    <Database size={16} />
+                <div className="w-full p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-left flex items-center gap-2.5">
+                  <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg shrink-0">
+                    <ShieldCheck size={14} />
                   </div>
-                  <div className="text-xs">
-                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <ShieldCheck size={14} className="text-emerald-600" /> Current Work &amp; Form Data Protected
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                      Extending your session keeps your open forms, active computations, draft invoices, and page state intact without page reload.
-                    </p>
+                  <div className="text-[11px] text-slate-600 leading-snug">
+                    <strong className="text-slate-800 font-bold">Current Form Data Protected:</strong> Active draft invoices, computations, and page state remain preserved.
                   </div>
                 </div>
 
-                {/* Visual Circular Timer */}
-                <div className="relative w-40 h-40 my-5 flex items-center justify-center">
+                {/* Visual Compact Circular Timer */}
+                <div className="relative w-24 h-24 my-1 flex items-center justify-center shrink-0">
                   <svg className="absolute inset-0 w-full h-full -rotate-90">
                     <circle
-                      cx="80"
-                      cy="80"
-                      r="72"
+                      cx="48"
+                      cy="48"
+                      r="40"
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="8"
+                      strokeWidth="6"
                       className="text-slate-100"
                     />
                     <motion.circle
-                      cx="80"
-                      cy="80"
-                      r="72"
+                      cx="48"
+                      cy="48"
+                      r="40"
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="8"
-                      strokeDasharray="452.39" // 2 * PI * 72
+                      strokeWidth="6"
+                      strokeDasharray="251.32" // 2 * PI * 40
                       initial={{ strokeDashoffset: 0 }}
-                      animate={{ strokeDashoffset: 452.39 - (452.39 * remainingSeconds) / warningDurationSec }}
+                      animate={{ strokeDashoffset: 251.32 - (251.32 * remainingSeconds) / warningDurationSec }}
                       transition={{ duration: 1, ease: "linear" }}
                       className={
                         remainingSeconds > (warningDurationSec / 2) ? 'text-blue-600' :
@@ -311,58 +306,58 @@ const InactivityTracker: React.FC = () => {
                   <div className="flex flex-col items-center justify-center relative z-10">
                     <motion.div 
                       key={remainingSeconds}
-                      initial={{ scale: 1.15, opacity: 0.8 }}
+                      initial={{ scale: 1.1, opacity: 0.8 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      className={`text-5xl font-black tracking-tighter font-mono tabular-nums ${
+                      className={`text-3xl font-black tracking-tighter font-mono tabular-nums leading-none ${
                         remainingSeconds > 30 ? 'text-slate-900' :
                         remainingSeconds > 15 ? 'text-amber-600' : 'text-rose-600'
                       }`}
                     >
                       {remainingSeconds.toString().padStart(2, '0')}
                     </motion.div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mt-0.5">Seconds Left</span>
+                    <span className="text-[8px] font-extrabold uppercase tracking-widest text-slate-400 mt-0.5">Sec Left</span>
                   </div>
                 </div>
 
                 {/* Main Action Buttons */}
-                <div className="w-full flex flex-col gap-2.5">
+                <div className="w-full flex flex-col gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => handleStayLoggedIn(15)}
-                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-extrabold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-blue-600/25 active:scale-98 cursor-pointer"
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-extrabold text-xs sm:text-sm tracking-wide flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/20 active:scale-98 cursor-pointer"
                   >
-                    <RefreshCw size={18} />
+                    <RefreshCw size={16} />
                     <span>Stay Logged In</span>
                   </button>
 
-                  <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => handleStayLoggedIn(60)}
-                      className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-slate-200"
+                      className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer"
                     >
-                      <Hourglass size={14} className="text-slate-500" /> +1 Hour Extension
+                      <Hourglass size={13} className="text-slate-500" /> +1 Hr Extension
                     </button>
 
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="py-2.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-slate-200 hover:border-rose-200"
+                      className="py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-slate-200 hover:border-rose-200 cursor-pointer"
                     >
-                      <LogOut size={14} /> Log Out Now
+                      <LogOut size={13} /> Log Out Now
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-4 text-[10px] text-slate-400 font-medium">
-                  Tip: Press <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-slate-700 font-mono font-bold">ENTER</kbd> or <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-slate-700 font-mono font-bold">SPACE</kbd> to extend immediately
+                <div className="text-[10px] text-slate-400 font-medium">
+                  Press <kbd className="px-1.5 py-0.2 bg-slate-100 border border-slate-300 rounded text-slate-700 font-mono font-bold">ENTER</kbd> or <kbd className="px-1.5 py-0.2 bg-slate-100 border border-slate-300 rounded text-slate-700 font-mono font-bold">SPACE</kbd> to extend
                 </div>
               </div>
 
               {/* Modal Footer */}
-              <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold text-slate-500">
+              <div className="shrink-0 px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold text-slate-500">
                 <span className="flex items-center gap-1.5 text-slate-600">
-                  <ShieldCheck size={14} className="text-blue-600" /> Continuous Token Refresh Active
+                  <ShieldCheck size={13} className="text-blue-600" /> Continuous Token Refresh Active
                 </span>
                 <span className="font-mono text-slate-400">SOC 2 Compliant</span>
               </div>

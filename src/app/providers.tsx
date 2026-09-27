@@ -12,6 +12,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { store } from '../../store/store';
 import { LanguageProvider } from '../../utils/i18n';
 import { WorkspaceSyncProvider } from '../../components/WorkspaceSyncContext';
+import { TenantContextProvider } from '../core/tenancy/TenantContext';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,9 +40,11 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <LanguageProvider>
-            <WorkspaceSyncProvider>
-              {children}
-            </WorkspaceSyncProvider>
+            <TenantContextProvider>
+              <WorkspaceSyncProvider>
+                {children}
+              </WorkspaceSyncProvider>
+            </TenantContextProvider>
           </LanguageProvider>
         </BrowserRouter>
       </QueryClientProvider>

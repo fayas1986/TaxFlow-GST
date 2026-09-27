@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, setSelectedGstin, setSelectedBranch } from '../store/store';
@@ -9,7 +9,8 @@ import {
   Building, CreditCard, Percent, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   ArrowUpDown, ArrowUp, ArrowDown, Upload, FileSpreadsheet,
   QrCode, Printer, Receipt, Tag, AlertCircle, ScanLine, Copy, Check, CheckCircle2, RefreshCw, Truck, ShieldAlert, MoreHorizontal, Search, Layers, Maximize2, AlertTriangle, ShieldCheck, Trash2, PlusCircle, Send, Bell, Camera, Clock,
-  RotateCw, ZoomIn, ZoomOut, Palette, Share2, ExternalLink, History, Zap, Sliders, Building2, Globe, Repeat, Database, Save, CloudOff, MessageSquare
+  RotateCw, ZoomIn, ZoomOut, Palette, Share2, ExternalLink, History, Zap, Sliders, Building2, Globe, Repeat, Database, Save, CloudOff, MessageSquare,
+  Lock, ArrowUpRight, Sparkles
 } from 'lucide-react';
 import { Invoice, InvoiceItem, UserRole, InvoiceReminder, ExportConfig, ImportLog, InvoiceVersion } from '../types';
 import { exportToCSV } from '../utils/export';
@@ -36,6 +37,9 @@ import { AiExpenseCategorySuggester, STANDARD_EXPENSE_CATEGORIES } from '../comp
 import { ExpenseCategorySuggestion } from '../types';
 import { SendInvoiceWhatsAppModal } from '../components/SendInvoiceWhatsAppModal';
 import { WhatsAppNotificationCenter } from '../components/WhatsAppNotificationCenter';
+import { BranchManagerModal } from '../components/BranchManagerModal';
+import { subscriptionManager } from '../src/core/billing/SubscriptionManager';
+import SmartTaxRateClassifier from '../components/SmartTaxRateClassifier';
 
 type InvoiceCategory = 'SALES' | 'PURCHASE' | 'CN_DN';
 
@@ -45,6 +49,7 @@ const Invoices: React.FC = () => {
 
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const user = useSelector((state: RootState) => state.auth.user);
   const selectedGstin = useSelector((state: RootState) => state.org.selectedGstin);
   const selectedBranchId = useSelector((state: RootState) => state.org.selectedBranchId);
@@ -58,8 +63,20 @@ const Invoices: React.FC = () => {
   const activeGstinObj = currentTenantGstins.find(g => g.gstin === selectedGstin);
   const activeBranchObj = currentTenantBranches.find(b => b.id === selectedBranchId);
   
-  // RBAC: Super Admin, Admin, Finance Manager, and Accountants can create/edit invoices. Auditors and Viewers are read-only.
-  const canEdit = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.ADMIN || user?.role === UserRole.FINANCE_MANAGER || user?.role === UserRole.ACCOUNTANT;
+  // RBAC & Plan Entitlements
+  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+  const canEdit = isSuperAdmin || user?.role === UserRole.ADMIN || user?.role === UserRole.FINANCE_MANAGER || user?.role === UserRole.ACCOUNTANT;
+  const subProfile = subscriptionManager.getUserSubscriptionProfile(user?.role, tenantId);
+  const canBulkEInvoice = isSuperAdmin || Boolean(subProfile.canEInvoicing);
+  const canMultiGstin = isSuperAdmin || Boolean(subProfile.canMultiGstin);
+  const canMultiBranch = isSuperAdmin || Boolean(subProfile.canMultiBranch);
+
+  const [upgradePrompt, setUpgradePrompt] = useState<{
+    isOpen: boolean;
+    feature: string;
+    description: string;
+    requiredPlan: string;
+  } | null>(null);
 
   const { data: invoices, isLoading, refetch } = useQuery({ 
       queryKey: ['invoices', tenantId, selectedGstin, selectedBranchId], 
@@ -122,6 +139,7 @@ const Invoices: React.FC = () => {
   const [whatsAppModalInvoice, setWhatsAppModalInvoice] = useState<Invoice | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [isEvidenceTrailOpen, setIsEvidenceTrailOpen] = useState(false);
+  const [isAiTaxClassifierModalOpen, setIsAiTaxClassifierModalOpen] = useState(false);
   const [isCurrencyConverterOpen, setIsCurrencyConverterOpen] = useState(false);
   const [isAutoCatRulesOpen, setIsAutoCatRulesOpen] = useState(false);
   
@@ -497,6 +515,11 @@ const Invoices: React.FC = () => {
   const [filterDocType, setFilterDocType] = useState<'ALL' | 'CREDIT_NOTE' | 'DEBIT_NOTE' | 'AMENDMENT'>('ALL');
   const [filterCompliance, setFilterCompliance] = useState<'ALL' | 'RCM' | 'BLOCKED_ITC' | 'IMPORT' | 'SEZ'>('ALL');
   const [filterVendorBillOnly, setFilterVendorBillOnly] = useState(false);
+
+  // Branch Management States
+  const [isBranchManagerOpen, setIsBranchManagerOpen] = useState(false);
+  const [branchIdInput, setBranchIdInput] = useState<string>('');
+  const [costCenterInput, setCostCenterInput] = useState<string>('');
 
   // New Invoice Form Toggles & State
   const [isRcmInput, setIsRcmInput] = useState(false);
@@ -875,9 +898,13 @@ const Invoices: React.FC = () => {
     }));
 
     const isPurchase = activeCategory === 'PURCHASE';
+    const targetBranch = currentTenantBranches.find(b => b.id === (branchIdInput || selectedBranchId)) || currentTenantBranches[0];
 
     addInvoice({
       tenantId: tenantId,
+      branchId: targetBranch?.id || 'b1',
+      branchName: targetBranch?.name || 'Primary Head Office',
+      costCenter: costCenterInput || targetBranch?.costCenter || 'CC-CORP-100',
       invoiceNumber: invoiceNumberInput,
       partyName: partyNameInput,
       gstin: gstinInput,
@@ -1238,6 +1265,16 @@ const Invoices: React.FC = () => {
   };
 
   const handleBulkGenerate = () => {
+      if (!canBulkEInvoice) {
+          setUpgradePrompt({
+              isOpen: true,
+              feature: 'Bulk Batch E-Invoice Generation',
+              description: 'Batch generating statutory IRN numbers and cryptographically signed QR codes for multiple invoices simultaneously is available on Business Growth and Enterprise plans.',
+              requiredPlan: 'Business Growth'
+          });
+          return;
+      }
+
       if (eligibleForEInvoice.length > 0) {
           const unapprovedInvoices = eligibleForEInvoice
               .map(id => invoices?.find(i => i.id === id))
@@ -1263,6 +1300,16 @@ const Invoices: React.FC = () => {
   };
 
   const handleBulkEWayBill = () => {
+      if (!canBulkEInvoice) {
+          setUpgradePrompt({
+              isOpen: true,
+              feature: 'Bulk Batch E-Way Bill Generation',
+              description: 'Batch dispatching E-Way Bills directly to the government portal across multiple invoices is available on Business Growth and Enterprise plans.',
+              requiredPlan: 'Business Growth'
+          });
+          return;
+      }
+
       if (eligibleForEWayBill.length > 0) {
           if (confirm(`Generate E-Way Bills for ${eligibleForEWayBill.length} selected documents?`)) bulkGenEWayBills(eligibleForEWayBill);
       } else alert("No eligible invoices selected for E-Way Bill generation.\nEnsure selected invoices have IRNs and no existing E-Way Bill.");
@@ -1575,6 +1622,15 @@ const Invoices: React.FC = () => {
         {canEdit && (
           <div className="flex flex-wrap items-center gap-2.5">
             <button 
+              onClick={() => setIsBranchManagerOpen(true)} 
+              className="h-10 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 rounded-xl text-xs font-bold transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
+              title="Allocate invoices & filings across branches or cost centers"
+            >
+              <Building2 size={15} className="text-slate-600" />
+              <span>Branch Manager</span>
+            </button>
+
+            <button 
               onClick={() => setIsImportModalOpen(true)} 
               className="h-10 px-4 bg-amber-400 hover:bg-amber-500 text-slate-900 rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
               title="Bulk import batch transaction data via CSV"
@@ -1801,10 +1857,26 @@ const Invoices: React.FC = () => {
             <button 
               onClick={handleBulkGenerate} 
               disabled={isBulkGenerating} 
-              className="h-10 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className={`h-10 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                !canBulkEInvoice
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              }`}
+              title={!canBulkEInvoice ? 'Bulk E-Invoice is available on Business Growth plan' : 'Batch generate E-Invoices'}
             >
-              {isBulkGenerating ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
+              {isBulkGenerating ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : !canBulkEInvoice ? (
+                <Lock size={13} className="text-amber-600" />
+              ) : (
+                <Layers size={14} />
+              )}
               <span>E-Invoice ({eligibleForEInvoice.length})</span>
+              {!canBulkEInvoice && (
+                <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-black border border-amber-200">
+                  GROWTH
+                </span>
+              )}
             </button>
           )}
 
@@ -1812,10 +1884,26 @@ const Invoices: React.FC = () => {
             <button 
               onClick={handleBulkEWayBill} 
               disabled={isBulkEwbGenerating} 
-              className="h-10 px-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className={`h-10 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                !canBulkEInvoice
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+              }`}
+              title={!canBulkEInvoice ? 'Bulk E-Way Bill is available on Business Growth plan' : 'Batch generate E-Way Bills'}
             >
-              {isBulkEwbGenerating ? <Loader2 size={14} className="animate-spin" /> : <Truck size={14} />}
+              {isBulkEwbGenerating ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : !canBulkEInvoice ? (
+                <Lock size={13} className="text-amber-600" />
+              ) : (
+                <Truck size={14} />
+              )}
               <span>E-Way Bill ({eligibleForEWayBill.length})</span>
+              {!canBulkEInvoice && (
+                <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-black border border-amber-200">
+                  GROWTH
+                </span>
+              )}
             </button>
           )}
 
@@ -1830,6 +1918,24 @@ const Invoices: React.FC = () => {
               <span>Auto-Tag ITC</span>
             </button>
           )}
+
+          <button 
+            onClick={() => navigate('/recurring-invoices')}
+            className="h-10 px-3.5 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 border border-indigo-200 text-indigo-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+            title="Recurring Invoices & Periodic Tax Automation"
+          >
+            <Calendar size={14} className="text-indigo-600" />
+            <span>Recurring Invoices</span>
+          </button>
+
+          <button 
+            onClick={() => setIsAiTaxClassifierModalOpen(true)}
+            className="h-10 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            title="AI Smart Tax Rate Classifier & HSN Suggestion"
+          >
+            <Sparkles size={14} className="text-indigo-600" />
+            <span>AI Tax Classifier</span>
+          </button>
 
           <button 
             onClick={() => setIsAutoCatRulesOpen(true)} 
@@ -2849,6 +2955,48 @@ const Invoices: React.FC = () => {
                         ))}
                     </div>
                 </div>
+
+                {/* Organizational Branch & Cost Center Allocation (Clean for Starter) */}
+                {canMultiBranch && currentTenantBranches.length > 1 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-amber-50/40 rounded-2xl border border-amber-200/80">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Building2 size={13} className="text-amber-600" /> Organizational Branch
+                      </label>
+                      <select
+                        value={branchIdInput || selectedBranchId || currentTenantBranches[0]?.id || ''}
+                        onChange={(e) => {
+                          const bId = e.target.value;
+                          setBranchIdInput(bId);
+                          const matched = currentTenantBranches.find(b => b.id === bId);
+                          if (matched?.costCenter) {
+                            setCostCenterInput(matched.costCenter);
+                          }
+                        }}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 outline-none focus:border-amber-500 font-medium"
+                      >
+                        {currentTenantBranches.map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.code}) - {b.stateName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag size={13} className="text-amber-600" /> Cost Center Allocation
+                      </label>
+                      <input
+                        type="text"
+                        value={costCenterInput}
+                        onChange={(e) => setCostCenterInput(e.target.value)}
+                        placeholder="e.g. CC-CORP-100 or CC-LOGISTICS-MH"
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-mono text-slate-900 outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* AI Expense Category Suggester & Statutory Tax Category */}
                 <div className="space-y-4">
@@ -4074,6 +4222,91 @@ const Invoices: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['auditLogs', tenantId] });
           }}
         />
+      )}
+
+      {/* Branch Manager Modal */}
+      {isBranchManagerOpen && (
+        <BranchManagerModal
+          isOpen={isBranchManagerOpen}
+          onClose={() => setIsBranchManagerOpen(false)}
+          tenantId={tenantId}
+        />
+      )}
+
+      {/* Plan Upgrade Prompt Modal */}
+      {upgradePrompt?.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-amber-200 max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4 border border-amber-200">
+              <Lock size={24} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                {upgradePrompt.requiredPlan}
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mt-2">
+              {upgradePrompt.feature}
+            </h3>
+            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              {upgradePrompt.description}
+            </p>
+            <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500">
+              Your organization is currently on the <strong className="text-slate-800">{subProfile.planName}</strong> plan. Upgrade anytime from Settings to unlock enterprise batch capabilities.
+            </div>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setUpgradePrompt(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                Close
+              </button>
+              <a
+                href="#/settings"
+                onClick={() => setUpgradePrompt(null)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-all shadow-blue-600/20"
+              >
+                <ArrowUpRight size={14} />
+                View Plans in Settings
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Smart Tax Rate Classifier Modal */}
+      {isAiTaxClassifierModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-5xl w-full p-2 relative my-8 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">AI Tax Rate Classifier</h3>
+                  <p className="text-xs text-slate-500">Analyze product or service descriptions to apply the correct statutory GST tax rates</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAiTaxClassifierModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="p-4 max-h-[80vh] overflow-y-auto">
+              <SmartTaxRateClassifier
+                onApplyToInvoice={(classified) => {
+                  setIsAiTaxClassifierModalOpen(false);
+                  // Open create modal with prefilled line item
+                  setIsCreateModalOpen(true);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

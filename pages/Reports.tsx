@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store/store';
@@ -23,19 +23,31 @@ import {
   Plus, Building, GitBranch, Link, Network, Loader2, X, Bookmark, Trash2, Save, Calendar, Clock, Palette, Printer,
   Layers, Sliders, Sparkles, ArrowUpRight, BarChart3, CheckCircle2, Building2, Split
 } from 'lucide-react';
-import { AuditLogData, SavedReport, ExportConfig, BranchReportData } from '../types';
+import { AuditLogData, SavedReport, ExportConfig, BranchReportData, UserRole } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import TemplateSelector from '../components/TemplateSelector';
 import { generateStyledDocument } from '../services/documentGenerator';
 import GeoGstMapVisualization from '../components/GeoGstMapVisualization';
 import { ScheduleReportModal } from '../components/ScheduleReportModal';
 import MonthlyGstReportingDashboard from '../components/MonthlyGstReportingDashboard';
+import { subscriptionManager } from '../src/core/billing/SubscriptionManager';
 
 const Reports: React.FC = () => {
   const queryClient = useQueryClient();
   const user = useSelector((state: RootState) => state.auth.user);
   const tenantId = user?.currentTenantId || 't1';
+  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+  const subProfile = subscriptionManager.getUserSubscriptionProfile(user?.role, tenantId);
+  const canUseMultiBranch = isSuperAdmin || Boolean(subProfile.canMultiBranch);
+
   const [activeTab, setActiveTab] = useState<'FY_MONTHLY_TRENDS' | 'REGIONAL_MAP' | 'LIABILITY' | 'BRANCH_COMPARISON' | 'ITC' | 'VENDOR' | 'BRANCH'>('FY_MONTHLY_TRENDS');
+
+  // Fallback if current tab is not available for active plan
+  useEffect(() => {
+    if (!canUseMultiBranch && (activeTab === 'BRANCH_COMPARISON' || activeTab === 'BRANCH')) {
+      setActiveTab('FY_MONTHLY_TRENDS');
+    }
+  }, [canUseMultiBranch, activeTab]);
 
   // Filter State
   const [filters, setFilters] = useState({
@@ -942,10 +954,12 @@ const Reports: React.FC = () => {
              { id: 'FY_MONTHLY_TRENDS', label: 'FY Monthly Liability & ITC Trends', icon: BarChart3 },
              { id: 'REGIONAL_MAP', label: 'Regional Geo Map', icon: Globe },
              { id: 'LIABILITY', label: 'Tax Liability', icon: TrendingUp },
-             { id: 'BRANCH_COMPARISON', label: 'Branch Comparison', icon: GitBranch },
+             ...(canUseMultiBranch ? [
+               { id: 'BRANCH_COMPARISON', label: 'Branch Comparison', icon: GitBranch },
+               { id: 'BRANCH', label: 'Branch Entities', icon: MapPin }
+             ] : []),
              { id: 'ITC', label: 'ITC Utilization', icon: Wallet },
              { id: 'VENDOR', label: 'Vendor Score', icon: Users },
-             { id: 'BRANCH', label: 'Branch Entities', icon: MapPin },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -957,7 +971,7 @@ const Reports: React.FC = () => {
               }`}
             >
               <tab.icon size={16} className={activeTab === tab.id ? 'text-blue-500' : 'text-slate-400'}/>
-              {tab.label}
+              <span>{tab.label}</span>
             </button>
           ))}
       </div>
@@ -979,59 +993,61 @@ const Reports: React.FC = () => {
             </div>
           )}
 
-          {/* DIRECT BRANCH COMPARISON TAB */}
-          {activeTab === 'BRANCH_COMPARISON' && (
+          {/* DIRECT BRANCH COMPARISON TAB (Multi-Branch only) */}
+          {activeTab === 'BRANCH_COMPARISON' && canUseMultiBranch && (
             renderBranchWiseComparisonContent()
           )}
 
           {/* LIABILITY TAB */}
           {activeTab === 'LIABILITY' && liabilityData && (
               <div className="space-y-6">
-                  {/* Branch Comparison Toggle Header */}
-                  <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 text-white p-5 rounded-2xl shadow-lg border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="p-3 bg-blue-500/20 border border-blue-400/30 rounded-xl text-blue-300 shrink-0 shadow-inner">
-                        <GitBranch size={22} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-bold text-base text-white tracking-tight">Branch-wise Tax Liability Comparison Toggle</h3>
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-500/30 text-blue-200 border border-blue-400/30 uppercase tracking-wider">
-                            Finance Manager Control
-                          </span>
+                  {/* Branch Comparison Toggle Header - only available when multi-branch is supported */}
+                  {canUseMultiBranch && (
+                    <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 text-white p-5 rounded-2xl shadow-lg border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5">
+                        <div className="p-3 bg-blue-500/20 border border-blue-400/30 rounded-xl text-blue-300 shrink-0 shadow-inner">
+                          <GitBranch size={22} />
                         </div>
-                        <p className="text-xs text-slate-300 mt-1">
-                          Toggle between consolidated organization YTD view and operational branch-wise tax liability segregation.
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-bold text-base text-white tracking-tight">Branch-wise Tax Liability Comparison Toggle</h3>
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-500/30 text-blue-200 border border-blue-400/30 uppercase tracking-wider">
+                              Finance Manager Control
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 mt-1">
+                            Toggle between consolidated organization YTD view and operational branch-wise tax liability segregation.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 bg-slate-900/90 p-1.5 rounded-xl border border-slate-700/80 shrink-0 self-stretch md:self-auto justify-between md:justify-start">
+                        <span 
+                          onClick={() => setIsBranchWiseComparison(false)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${!isBranchWiseComparison ? 'text-white bg-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          Consolidated YTD
+                        </span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isBranchWiseComparison}
+                            onChange={(e) => setIsBranchWiseComparison(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </label>
+                        <span 
+                          onClick={() => setIsBranchWiseComparison(true)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${isBranchWiseComparison ? 'text-white bg-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          Branch Segregated ON
+                        </span>
                       </div>
                     </div>
+                  )}
 
-                    <div className="flex items-center gap-3 bg-slate-900/90 p-1.5 rounded-xl border border-slate-700/80 shrink-0 self-stretch md:self-auto justify-between md:justify-start">
-                      <span 
-                        onClick={() => setIsBranchWiseComparison(false)}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${!isBranchWiseComparison ? 'text-white bg-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                      >
-                        Consolidated YTD
-                      </span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isBranchWiseComparison}
-                          onChange={(e) => setIsBranchWiseComparison(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                      </label>
-                      <span 
-                        onClick={() => setIsBranchWiseComparison(true)}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${isBranchWiseComparison ? 'text-white bg-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                      >
-                        Branch Segregated ON
-                      </span>
-                    </div>
-                  </div>
-
-                  {isBranchWiseComparison ? (
+                  {isBranchWiseComparison && canUseMultiBranch ? (
                     renderBranchWiseComparisonContent()
                   ) : (
                     <>
@@ -1222,7 +1238,7 @@ const Reports: React.FC = () => {
           )}
 
           {/* BRANCH TAB */}
-          {activeTab === 'BRANCH' && branchData && (
+          {activeTab === 'BRANCH' && canUseMultiBranch && branchData && (
                <div className="space-y-6">
                    {/* Enhanced Summary Card with Actions */}
                    <div className="bg-gradient-to-r from-slate-900 to-blue-900 text-white p-8 rounded-2xl shadow-xl relative overflow-hidden">

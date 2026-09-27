@@ -5,7 +5,8 @@ export enum UserRole {
   ACCOUNTANT = 'ACCOUNTANT',
   AUDITOR = 'AUDITOR',
   FINANCE_MANAGER = 'FINANCE_MANAGER',
-  VIEWER = 'VIEWER'
+  VIEWER = 'VIEWER',
+  CUSTOMER = 'CUSTOMER'
 }
 
 export type DepartmentCode = 
@@ -492,6 +493,9 @@ export interface FilingRecord {
   filedDate?: string;
   arn?: string; 
   taxLiability?: number;
+  branchId?: string;
+  branchName?: string;
+  costCenter?: string;
 }
 
 export interface ComplianceAlert {
@@ -563,8 +567,10 @@ export interface BranchReportData {
 
 export interface AuditChange {
   field: string;
-  oldValue: string | number | null;
-  newValue: string | number | null;
+  oldValue: string | number | boolean | null;
+  newValue: string | number | boolean | null;
+  fieldLabel?: string;
+  changeType?: 'MODIFIED' | 'ADDED' | 'REMOVED' | 'STATUS_CHANGE';
 }
 
 export interface AuditLogData {
@@ -573,14 +579,24 @@ export interface AuditLogData {
   action: string;
   module: 'INVOICE' | 'FILING' | 'AUTH' | 'COMPLIANCE' | 'SYSTEM' | 'SETTINGS';
   user: string;
+  userEmail?: string;
+  userAvatar?: string;
   role: string;
   timestamp: string;
   status: 'SUCCESS' | 'FAILURE';
   details?: string;
   ipAddress?: string;
+  device?: string;
+  entityType?: 'INVOICE' | 'RETURN_FILING' | 'E_WAY_BILL' | 'RECONCILIATION' | 'AUTH' | 'COMPLIANCE_POLICY';
+  entityId?: string;
+  entityReference?: string;
+  arn?: string;
+  period?: string;
+  changeSummary?: string;
   changes?: AuditChange[];
   hash: string;
   previousHash: string;
+  metadata?: Record<string, any>;
 }
 
 export type AnomalyCategory = 
@@ -799,6 +815,64 @@ export interface BankStatementTransaction {
   refNo: string;
   bankName: string;
   accountNumber: string;
+  branchId?: string;
+  branchName?: string;
+  costCenter?: string;
+  category?: 'VENDOR_PAYMENT' | 'CUSTOMER_RECEIPT' | 'STATUTORY_TAX' | 'BANK_CHARGE' | 'INTER_BRANCH_TRANSFER' | 'OTHER';
+  matchedInvoiceId?: string;
+}
+
+export type BranchDiscrepancyType = 
+  | 'EXACT_MATCH'
+  | 'AMOUNT_VARIANCE'
+  | 'TIMING_DELAY'
+  | 'TDS_ROUNDOFF'
+  | 'MISSING_IN_BANK'
+  | 'UNMATCHED_BANK_TXN'
+  | 'GSTIN_MISMATCH'
+  | 'CROSS_BRANCH_MISALLOCATION';
+
+export interface BranchReconMatch {
+  id: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  invoiceAmount?: number;
+  partyName?: string;
+  partyGstin?: string;
+  branchId: string;
+  branchName: string;
+  costCenter?: string;
+  category: 'SALES' | 'PURCHASE';
+  bankTxn?: BankStatementTransaction;
+  matchScore: number; // 0 to 100
+  confidence: 'EXACT' | 'PROBABLE' | 'DISCREPANCY' | 'UNMATCHED';
+  status: 'RECONCILED' | 'PENDING' | 'RESOLVED_ADJUSTMENT' | 'FLAGGED_DISPUTE' | 'EXCLUDED';
+  discrepancyType: BranchDiscrepancyType;
+  discrepancyAmount: number;
+  discrepancyReasons: string[];
+  suggestedAction: string;
+  resolutionNote?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
+export interface BranchReconSummary {
+  branchId: string;
+  branchName: string;
+  branchCode: string;
+  totalInvoicesCount: number;
+  totalInvoicesAmount: number;
+  totalBankTxnsCount: number;
+  totalBankTxnsAmount: number;
+  reconciledCount: number;
+  reconciledAmount: number;
+  discrepancyCount: number;
+  discrepancyAmount: number;
+  unmatchedInvoicesCount: number;
+  unmatchedBankTxnsCount: number;
+  reconciliationRatePct: number;
+  matches: BranchReconMatch[];
 }
 
 export interface ReconMatchResult {
@@ -908,6 +982,13 @@ export interface BranchDetailsItem {
   contactPhone: string;
   status: 'ACTIVE' | 'INACTIVE';
   annualTurnoverContributionPct: number;
+  costCenter?: string;
+  costCenterCode?: string;
+  costCenterName?: string;
+  description?: string;
+  budgetAllocation?: number;
+  activeInvoicesCount?: number;
+  activeFilingsCount?: number;
 }
 
 export interface FinancialYearConfigItem {
@@ -1189,5 +1270,365 @@ export interface WhatsAppClientItem {
   }>;
 }
 
+export interface AlternativeTaxRate {
+  rate: number;
+  condition: string;
+  schedule?: string;
+  hsnSac?: string;
+}
 
+export interface SmartTaxClassificationResult {
+  description: string;
+  suggestedRate: number; // e.g. 18, 5, 12, 28, 0, 3, etc.
+  slabName: string; // e.g. "18% Standard Rate", "5% Merit Rate"
+  hsnSacCode: string; // e.g. "998314", "847130"
+  hsnSacTitle: string; // e.g. "Information Technology Software Development Services"
+  category: 'GOODS' | 'SERVICES';
+  chapter: string; // e.g. "Chapter 99 (Services)", "Chapter 84 (Nuclear reactors, boilers, machinery)"
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  cessRate: number;
+  confidenceScore: number; // 0 to 100
+  statutorySchedule: string; // e.g. "Schedule III - Entry 369A", "Notification 11/2017-CT(R)"
+  reasoning: string;
+  conditionsOrExceptions?: string;
+  rcmApplicable: boolean; // Reverse Charge Mechanism under Sec 9(3)/9(4)
+  rcmReasoning?: string;
+  compositionApplicable: boolean;
+  itcEligibility: 'ELIGIBLE' | 'BLOCKED_17_5' | 'CONDITIONAL';
+  itcReasoning?: string;
+  alternativeRates?: AlternativeTaxRate[];
+  applicableKeywords?: string[];
+  analyzedAt?: string;
+  inputContext?: {
+    price?: number;
+    isInterstate?: boolean;
+    b2b?: boolean;
+    customNote?: string;
+  };
+}
 
+export interface BatchTaxClassificationItem {
+  id: string;
+  description: string;
+  price?: number;
+  quantity?: number;
+  customContext?: string;
+}
+
+export interface BatchTaxClassificationResponse {
+  results: SmartTaxClassificationResult[];
+  summary: {
+    totalItems: number;
+    avgConfidence: number;
+    rateDistribution: Record<string, number>;
+    totalEstimatedTax?: number;
+    totalTaxableAmount?: number;
+  };
+}
+
+// =========================================================================
+// INTELLIGENT HSN/SAC CODE MATCHING & TARIFF CLASSIFIER TYPES
+// =========================================================================
+
+export interface HsnSacHierarchyNode {
+  level: 'CHAPTER' | 'HEADING' | 'SUBHEADING' | 'TARIFF_ITEM';
+  code: string;
+  title: string;
+  digits: number;
+  description?: string;
+}
+
+export interface AlternativeHsnCandidate {
+  code: string;
+  title: string;
+  description: string;
+  gstRate: number;
+  category: 'GOODS' | 'SERVICES';
+  chapter: string;
+  distinctionCriteria: string; // Explains when to choose this over the primary match
+  uqc?: string;
+}
+
+export interface HsnSacMatchResult {
+  matchedCode: string; // e.g., "8471 30 10" or "9983 14"
+  cleanCode: string; // e.g., "84713010"
+  codeType: 'HSN' | 'SAC';
+  commodityName: string; // Clear standard trade name
+  officialDescription: string; // Statutory Tariff description
+  chapter: {
+    code: string;
+    title: string;
+  };
+  heading: {
+    code: string;
+    title: string;
+  };
+  subheading?: {
+    code: string;
+    title: string;
+  };
+  tariffItem?: {
+    code: string;
+    title: string;
+  };
+  hierarchy: HsnSacHierarchyNode[];
+  matchConfidence: number; // 0 to 100
+  confidenceLevel: 'EXACT_MATCH' | 'HIGH_CONFIDENCE' | 'MODERATE_CONFIDENCE' | 'LOW_CONFIDENCE';
+  semanticRationale: string; // Detailed AI breakdown of technical attributes
+  gstRate: number;
+  rateBreakdown: {
+    cgst: number;
+    sgst: number;
+    igst: number;
+    cess?: number;
+  };
+  uqc: string; // Standard Unit Quantity Code (e.g. NOS, KGS, MTR, LTR, SET, MT)
+  mandatoryDigitsNotice: string; // e.g. "4 Digits required for Turnover < ₹5 Cr; 6 Digits for > ₹5 Cr; 8 Digits for Export/Imports"
+  digitsRequired: number; // 4, 6, or 8
+  griClassificationRulesApplied: string[]; // General Rules for Interpretation citations (e.g., GRI 1, GRI 3(a))
+  synonyms: string[];
+  alternativeCandidates: AlternativeHsnCandidate[];
+  statutoryNotes: {
+    rcmApplicable: boolean;
+    rcmDescription?: string;
+    itcEligibility: 'ELIGIBLE' | 'BLOCKED_17_5' | 'CONDITIONAL';
+    itcNote?: string;
+    exemptionApplicable?: boolean;
+    exemptionCondition?: string;
+    notifications?: string[];
+  };
+  userQuery: string;
+  analyzedAt: string;
+  turnoverBracket?: string;
+}
+
+export interface BatchHsnMatchItem {
+  id: string;
+  query: string;
+  category?: 'ALL' | 'GOODS' | 'SERVICES';
+  unitPrice?: number;
+  quantity?: number;
+}
+
+export interface BatchHsnMatchResponse {
+  results: Array<HsnSacMatchResult & { id: string; quantity?: number; unitPrice?: number; lineTotal?: number }>;
+  summary: {
+    totalItems: number;
+    avgConfidence: number;
+    goodsCount: number;
+    servicesCount: number;
+    rateDistribution: Record<string, number>;
+  };
+}
+
+// =========================================================================
+// RECURRING INVOICE & AUTOMATED TAX LIABILITY SCHEDULING TYPES
+// =========================================================================
+
+export type RecurringBillingFrequency = 'MONTHLY' | 'QUARTERLY' | 'BI_ANNUAL' | 'ANNUAL';
+
+export interface RecurringBillingItem {
+  id: string;
+  description: string;
+  hsnSac: string;
+  quantity: number;
+  unit: string;
+  rate: number;
+  taxRate: number; // e.g. 5, 12, 18, 28
+  taxableValue: number;
+  taxAmount: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+}
+
+export interface GeneratedInvoiceExecutionLog {
+  executionId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  period: string; // e.g. "October 2026", "Q3 FY26-27"
+  generatedDate: string;
+  taxableAmount: number;
+  totalTax: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  status: 'GENERATED' | 'EMAIL_SENT' | 'WHATSAPP_SENT' | 'IRN_GENERATED' | 'FAILED';
+  deliveryStatus?: string;
+  irn?: string;
+}
+
+export interface RecurringInvoiceProfile {
+  id: string;
+  tenantId?: string;
+  profileName: string; // e.g. "Acme Corp Cloud Retainer", "Zenith Legal Advisory"
+  partyName: string;
+  gstin: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  placeOfSupply: string; // State Code e.g. "27" (Maharashtra), "29" (Karnataka)
+  supplierGstin?: string;
+  supplierPlaceOfSupply?: string;
+  branchId?: string;
+  frequency: RecurringBillingFrequency;
+  intervalDayOfMonth: number; // 1 to 28, or 31 (last day)
+  startDate: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD (optional)
+  nextRunDate: string; // YYYY-MM-DD
+  lastGeneratedDate?: string;
+  cyclesCompleted: number;
+  maxCycles?: number; // Optional limit
+  status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
+  
+  // Tax & Items configuration
+  currency: string;
+  items: RecurringBillingItem[];
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalTaxAmount: number;
+  totalInvoiceAmount: number;
+  isInterstate: boolean;
+  isRcm?: boolean;
+  
+  // Automation settings
+  paymentTermsDays: number; // e.g. 15 or 30 days
+  autoGenerateInvoice: boolean; // Auto-generate vs Draft for Review
+  autoSendEmail: boolean;
+  autoSendWhatsApp: boolean;
+  autoGenerateIrn: boolean; // E-Invoicing automation
+  periodPlaceholderFormat: 'MONTH_YEAR' | 'QUARTER_YEAR' | 'CUSTOM' | 'NONE'; // Replaces {{PERIOD}} in descriptions
+  customPrefix?: string; // e.g. "REC-INV"
+  notes?: string;
+  termsAndConditions?: string;
+  
+  // History & audit
+  executionLogs: GeneratedInvoiceExecutionLog[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecurringPeriodTaxLiability {
+  periodKey: string; // e.g. "2026-10" (Oct 2026) or "2026-Q3"
+  periodLabel: string; // e.g. "October 2026" or "Q3 (Oct-Dec 2026)"
+  quarterLabel?: string; // e.g. "Q3 FY26-27"
+  periodType: 'MONTH' | 'QUARTER';
+  invoiceCount: number;
+  clientCount: number;
+  totalTaxableValue: number;
+  totalCgstLiability: number;
+  totalSgstLiability: number;
+  totalIgstLiability: number;
+  totalTaxLiability: number;
+  totalGrossRevenue: number;
+  gstr1DueDate: string;
+  gstr3bDueDate: string;
+  breakdownBySlab: Record<string, { taxable: number; tax: number; count: number }>;
+  profilesDue: Array<{
+    profileId: string;
+    profileName: string;
+    partyName: string;
+    gstin: string;
+    scheduledDate: string;
+    taxable: number;
+    tax: number;
+    total: number;
+    isInterstate: boolean;
+  }>;
+}
+
+export interface RecurringModuleSummary {
+  totalProfiles: number;
+  activeProfiles: number;
+  pausedProfiles: number;
+  monthlyRecurringRevenue: number; // MRR Taxable
+  monthlyProjectedTax: number;
+  quarterlyProjectedTax: number;
+  annualProjectedTax: number;
+  nextRunIn7DaysCount: number;
+  nextRunIn7DaysTaxable: number;
+  nextRunIn7DaysTax: number;
+}
+
+// =========================================================================
+// CLIENT SECURE DOCUMENT UPLOAD & AUTOMATED GST CATEGORIZATION TYPES
+// =========================================================================
+
+export type ClientDocType = 'PURCHASE_BILL' | 'SALES_INVOICE' | 'CREDIT_DEBIT_NOTE' | 'EXPENSE_RECEIPT' | 'E_WAY_BILL' | 'BOE_IMPORT';
+
+export type ClientDocStatus = 'PROCESSING' | 'CATEGORIZED' | 'FLAGGED_ANOMALY' | 'VERIFIED' | 'FAILED';
+
+export interface ExtractedDocLineItem {
+  id: string;
+  description: string;
+  hsnSac?: string;
+  quantity?: number;
+  unit?: string;
+  rate?: number;
+  taxRate?: number;
+  taxableValue: number;
+  taxAmount?: number;
+  matchedStatutoryHsn?: string;
+  matchedStatutoryRate?: number;
+  rateMismatch?: boolean;
+}
+
+export interface DocumentCategorizationCheck {
+  checkedAt: string;
+  confidenceScore: number;
+  suggestedCategory: 'Input' | 'Output' | 'Capital Goods' | 'Exempt Inward' | 'RCM Inward';
+  expenseCategory: string;
+  glCode: string;
+  suggestedHsnSac: string;
+  suggestedGstRate: number;
+  hsnSacTitle: string;
+  chapter: string;
+  rateBreakdown: {
+    cgst: number;
+    sgst: number;
+    igst: number;
+  };
+  rcmApplicable: boolean;
+  rcmReasoning?: string;
+  itcEligibility: 'ELIGIBLE' | 'BLOCKED_17_5' | 'CONDITIONAL';
+  itcReasoning?: string;
+  statutorySchedule?: string;
+  discrepancyAlerts?: string[];
+  classificationSource: 'GEMINI_AI_CLASSIFIER' | 'CBIC_TARIFF_ENGINE' | 'RULE_HEURISTIC';
+  verifiedByAccountant?: boolean;
+}
+
+export interface ClientUploadedDocument {
+  id: string;
+  clientId: string;
+  clientName: string;
+  clientGstin: string;
+  clientStateCode?: string;
+  documentType: ClientDocType;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  fileDataUrl?: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  uploadStatus: ClientDocStatus;
+  financialPeriod: string; // e.g. "October 2026", "Q3 FY26-27"
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  counterpartyName?: string;
+  counterpartyGstin?: string;
+  placeOfSupply?: string;
+  totalTaxableAmount: number;
+  totalTaxAmount: number;
+  totalInvoiceValue: number;
+  notes?: string;
+  items: ExtractedDocLineItem[];
+  categorization: DocumentCategorizationCheck;
+  isPushedToInvoiceRegister?: boolean;
+  pushedInvoiceId?: string;
+}
+
+export * from './types/taxCompliance';

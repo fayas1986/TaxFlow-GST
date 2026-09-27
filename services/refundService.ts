@@ -1,3 +1,5 @@
+import { safeStorage } from '../utils/safeStorage';
+
 export type RefundCategory =
   | 'EXPORT_WITHOUT_TAX'         // Export of Goods & Services without payment of tax (under LUT/Bond)
   | 'INVERTED_DUTY_STRUCTURE'    // Accumulation of ITC due to Inverted Duty Structure
@@ -528,7 +530,7 @@ const initialRefundClaims: ItcRefundClaim[] = [
 export class RefundService {
   private static getClaims(): ItcRefundClaim[] {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = safeStorage.getItem(STORAGE_KEY);
       if (stored) {
         return JSON.parse(stored);
       }
@@ -541,7 +543,7 @@ export class RefundService {
 
   private static saveClaims(claims: ItcRefundClaim[]): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(claims));
+      safeStorage.setItem(STORAGE_KEY, JSON.stringify(claims));
     } catch (e) {
       console.error('Error saving refund claims', e);
     }

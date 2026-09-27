@@ -3,6 +3,7 @@
 // and security lock mechanisms per department (Finance, Tax, Audit, Operations, etc.)
 
 import { DepartmentCode } from '../types';
+import { safeStorage } from '../utils/safeStorage';
 
 export interface DepartmentInactivityPolicy {
   departmentCode: DepartmentCode | 'DEFAULT_GLOBAL';
@@ -212,7 +213,7 @@ export const loadDepartmentInactivityPolicies = (): DepartmentInactivityPolicy[]
   if (inMemoryPolicies) return inMemoryPolicies;
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = safeStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed: DepartmentInactivityPolicy[] = JSON.parse(raw);
       // Ensure all standard departments exist in loaded state
@@ -268,7 +269,7 @@ export const saveDepartmentInactivityPolicy = (
 
   inMemoryPolicies = newPolicies;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newPolicies));
+    safeStorage.setItem(STORAGE_KEY, JSON.stringify(newPolicies));
   } catch (e) {
     console.error('Failed to save inactivity policies:', e);
   }
@@ -311,7 +312,7 @@ export const applyPresetToAllDepartments = (
 
   inMemoryPolicies = updated;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    safeStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (e) {
     console.error('Failed to apply preset to all departments:', e);
   }
@@ -336,7 +337,7 @@ export const applyPresetToAllDepartments = (
 
 export const resetInactivityPoliciesToDefault = (): DepartmentInactivityPolicy[] => {
   inMemoryPolicies = [...DEFAULT_POLICIES];
-  localStorage.removeItem(STORAGE_KEY);
+  safeStorage.removeItem(STORAGE_KEY);
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('inactivity-policy-updated', { detail: { reset: true } }));
@@ -348,7 +349,7 @@ export const resetInactivityPoliciesToDefault = (): DepartmentInactivityPolicy[]
 export const loadPolicyAuditLogs = (): PolicyChangeAuditLog[] => {
   if (inMemoryAuditLogs) return inMemoryAuditLogs;
   try {
-    const raw = localStorage.getItem(AUDIT_STORAGE_KEY);
+    const raw = safeStorage.getItem(AUDIT_STORAGE_KEY);
     if (raw) {
       inMemoryAuditLogs = JSON.parse(raw);
       return inMemoryAuditLogs || [];
@@ -365,7 +366,7 @@ const addPolicyAuditLog = (log: PolicyChangeAuditLog) => {
   const updated = [log, ...logs].slice(0, 50); // Keep last 50 entries
   inMemoryAuditLogs = updated;
   try {
-    localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(updated));
+    safeStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(updated));
   } catch (e) {
     console.error('Failed to persist audit log:', e);
   }

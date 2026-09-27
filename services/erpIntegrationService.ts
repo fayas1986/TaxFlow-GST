@@ -1,4 +1,5 @@
 import { Invoice, InvoiceItem, UserRole } from '../types';
+import { safeStorage } from '../utils/safeStorage';
 
 export type SupportedErpId = 
   | 'qb' 
@@ -268,18 +269,18 @@ export class ErpIntegrationService {
 
   private ensureInitialized() {
     try {
-      const stored = localStorage.getItem(ERP_STORAGE_KEYS.CREDENTIALS);
+      const stored = safeStorage.getItem(ERP_STORAGE_KEYS.CREDENTIALS);
       if (!stored) {
-        localStorage.setItem(ERP_STORAGE_KEYS.CREDENTIALS, JSON.stringify(DEFAULT_ERP_CREDENTIALS));
+        safeStorage.setItem(ERP_STORAGE_KEYS.CREDENTIALS, JSON.stringify(DEFAULT_ERP_CREDENTIALS));
       }
     } catch (e) {
-      console.warn('ErpIntegrationService: localStorage unavailable', e);
+      console.warn('ErpIntegrationService: safeStorage unavailable', e);
     }
   }
 
   public getAllCredentials(): Record<SupportedErpId, ErpCredentials> {
     try {
-      const stored = localStorage.getItem(ERP_STORAGE_KEYS.CREDENTIALS);
+      const stored = safeStorage.getItem(ERP_STORAGE_KEYS.CREDENTIALS);
       if (stored) {
         const parsed = JSON.parse(stored);
         return { ...DEFAULT_ERP_CREDENTIALS, ...parsed };
@@ -311,7 +312,7 @@ export class ErpIntegrationService {
 
     all[erpId] = merged;
     try {
-      localStorage.setItem(ERP_STORAGE_KEYS.CREDENTIALS, JSON.stringify(all));
+      safeStorage.setItem(ERP_STORAGE_KEYS.CREDENTIALS, JSON.stringify(all));
     } catch (e) {
       console.error('Error saving ERP credentials', e);
     }
@@ -651,7 +652,7 @@ export class ErpIntegrationService {
    */
   private commitInvoicesToStorage(newInvoices: Invoice[]) {
     try {
-      const stored = localStorage.getItem(ERP_STORAGE_KEYS.LOCAL_INVOICES);
+      const stored = safeStorage.getItem(ERP_STORAGE_KEYS.LOCAL_INVOICES);
       let existing: Invoice[] = stored ? JSON.parse(stored) : [];
 
       // Deduplicate by invoiceNumber
@@ -665,7 +666,7 @@ export class ErpIntegrationService {
       }
 
       const merged = Array.from(existingMap.values());
-      localStorage.setItem(ERP_STORAGE_KEYS.LOCAL_INVOICES, JSON.stringify(merged));
+      safeStorage.setItem(ERP_STORAGE_KEYS.LOCAL_INVOICES, JSON.stringify(merged));
     } catch (e) {
       console.error('Error committing invoices to storage', e);
     }
@@ -673,11 +674,11 @@ export class ErpIntegrationService {
 
   private recordImportHistory(record: any) {
     try {
-      const stored = localStorage.getItem(ERP_STORAGE_KEYS.IMPORT_HISTORY);
+      const stored = safeStorage.getItem(ERP_STORAGE_KEYS.IMPORT_HISTORY);
       const history = stored ? JSON.parse(stored) : [];
       history.unshift(record);
       if (history.length > 50) history.pop();
-      localStorage.setItem(ERP_STORAGE_KEYS.IMPORT_HISTORY, JSON.stringify(history));
+      safeStorage.setItem(ERP_STORAGE_KEYS.IMPORT_HISTORY, JSON.stringify(history));
     } catch (e) {
       console.error('Error recording import history', e);
     }
@@ -685,7 +686,7 @@ export class ErpIntegrationService {
 
   public getImportHistory(): any[] {
     try {
-      const stored = localStorage.getItem(ERP_STORAGE_KEYS.IMPORT_HISTORY);
+      const stored = safeStorage.getItem(ERP_STORAGE_KEYS.IMPORT_HISTORY);
       return stored ? JSON.parse(stored) : [];
     } catch (e) {
       return [];

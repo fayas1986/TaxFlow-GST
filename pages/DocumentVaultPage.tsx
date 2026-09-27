@@ -15,6 +15,7 @@ import { localDb } from '../utils/localDb';
 import { logAuditAction } from '../services/api';
 import { dispatchEmailNotification } from "../utils/emailNotificationService";
 import PdfPreviewModal, { DocumentAnnotation } from '../components/PdfPreviewModal';
+import { ClientDocumentUpload } from '../components/ClientDocumentUpload';
 
 // Types for Document Vault
 import { DocumentComment, DocumentCommentThread } from "../components/DocumentCommentThread";
@@ -192,6 +193,7 @@ const DocumentVaultPage: React.FC = () => {
     setComputedFileHash(null);
     setIsUploadOpen(true);
   };
+  const [vaultMode, setVaultMode] = useState<'VAULT' | 'CLIENT_UPLOAD'>('VAULT');
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   
@@ -882,29 +884,57 @@ const DocumentVaultPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <button 
-            onClick={handleAutoTagVault}
-            disabled={isAutoTagging}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-bold transition-all shadow-sm"
-          >
-            <Tag size={14} className={isAutoTagging ? "animate-pulse" : ""} /> 
-            {isAutoTagging ? "Analyzing Vault..." : "Auto-Tag Vault"}
-          </button>
-          <button 
-            onClick={() => setIsCameraScannerOpen(true)}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-100"
-          >
-            <Camera size={14} /> Scan Physical Invoice
-          </button>
-          <button 
-            onClick={() => openUploadModal()}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-100"
-          >
-            <Upload size={14} /> Deposit Document
-          </button>
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setVaultMode('VAULT')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                vaultMode === 'VAULT' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Corporate Vault
+            </button>
+            <button
+              type="button"
+              onClick={() => setVaultMode('CLIENT_UPLOAD')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                vaultMode === 'CLIENT_UPLOAD' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Client Upload &amp; GST Check
+            </button>
+          </div>
+          {vaultMode === 'VAULT' && (
+            <>
+              <button 
+                onClick={handleAutoTagVault}
+                disabled={isAutoTagging}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-bold transition-all shadow-sm"
+              >
+                <Tag size={14} className={isAutoTagging ? "animate-pulse" : ""} /> 
+                {isAutoTagging ? "Analyzing Vault..." : "Auto-Tag Vault"}
+              </button>
+              <button 
+                onClick={() => setIsCameraScannerOpen(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-100"
+              >
+                <Camera size={14} /> Scan Physical Invoice
+              </button>
+              <button 
+                onClick={() => openUploadModal()}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-100"
+              >
+                <Upload size={14} /> Deposit Document
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {vaultMode === 'CLIENT_UPLOAD' ? (
+        <ClientDocumentUpload showHeader={false} />
+      ) : (
+        <>
       {/* High-Level Vault Security Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex items-center gap-3">
@@ -1367,6 +1397,8 @@ const DocumentVaultPage: React.FC = () => {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* MODAL: DOCUMENT DEPOSIT DRAG-N-DROP DRAWER */}
       <AnimatePresence>

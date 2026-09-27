@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
 import { EInvoiceQrCodeModal } from '../components/EInvoiceQrCodeModal';
 import { EInvoicePagination } from '../components/EInvoicePagination';
+import { safeStorage } from '../utils/safeStorage';
 
 export default function EInvoicePage() {
   const queryClient = useQueryClient();
@@ -39,31 +40,31 @@ export default function EInvoicePage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
   // IRP API Settings States
-  const [gspProvider, setGspProvider] = useState<string>(localStorage.getItem('irp_gsp_provider') || 'MasterIndia');
-  const [irpEnv, setIrpEnv] = useState<'SANDBOX' | 'PRODUCTION'>((localStorage.getItem('irp_env') as any) || 'SANDBOX');
-  const [gspUsername, setGspUsername] = useState<string>(localStorage.getItem('irp_gsp_username') || 'taxflow_gsp_user');
-  const [gspPassword, setGspPassword] = useState<string>(localStorage.getItem('irp_gsp_password') || '••••••••••••');
-  const [clientId, setClientId] = useState<string>(localStorage.getItem('irp_client_id') || 'cid_nic_taxflow_9012');
-  const [clientSecret, setClientSecret] = useState<string>(localStorage.getItem('irp_client_secret') || '••••••••••••••••••••••••');
+  const [gspProvider, setGspProvider] = useState<string>(() => safeStorage.getItem('irp_gsp_provider') || 'MasterIndia');
+  const [irpEnv, setIrpEnv] = useState<'SANDBOX' | 'PRODUCTION'>(() => (safeStorage.getItem('irp_env') as any) || 'SANDBOX');
+  const [gspUsername, setGspUsername] = useState<string>(() => safeStorage.getItem('irp_gsp_username') || 'taxflow_gsp_user');
+  const [gspPassword, setGspPassword] = useState<string>(() => safeStorage.getItem('irp_gsp_password') || '••••••••••••');
+  const [clientId, setClientId] = useState<string>(() => safeStorage.getItem('irp_client_id') || 'cid_nic_taxflow_9012');
+  const [clientSecret, setClientSecret] = useState<string>(() => safeStorage.getItem('irp_client_secret') || '••••••••••••••••••••••••');
   const [irpSimStatus, setIrpSimStatus] = useState<'ONLINE' | 'MAINTENANCE' | 'OFFLINE'>('ONLINE');
-  const [isBypassCancellationLimit, setIsBypassCancellationLimit] = useState<boolean>(localStorage.getItem('irp_bypass_cancellation_limit') === 'true');
+  const [isBypassCancellationLimit, setIsBypassCancellationLimit] = useState<boolean>(() => safeStorage.getItem('irp_bypass_cancellation_limit') === 'true');
 
   // IRP Connection Diagnostics
   const [isTestingHandshake, setIsTestingHandshake] = useState<boolean>(false);
   const [testHandshakeSteps, setTestHandshakeSteps] = useState<string[]>([]);
   const [testHandshakeResult, setTestHandshakeResult] = useState<'SUCCESS' | 'ERROR' | null>(null);
-  const [apiLatency, setApiLatency] = useState<number | null>(Number(localStorage.getItem('irp_api_latency')) || null);
-  const [lastVerifiedTime, setLastVerifiedTime] = useState<string>(localStorage.getItem('irp_last_verified') || '');
+  const [apiLatency, setApiLatency] = useState<number | null>(() => Number(safeStorage.getItem('irp_api_latency')) || null);
+  const [lastVerifiedTime, setLastVerifiedTime] = useState<string>(() => safeStorage.getItem('irp_last_verified') || '');
 
   const handleSaveCredentials = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('irp_gsp_provider', gspProvider);
-    localStorage.setItem('irp_env', irpEnv);
-    localStorage.setItem('irp_gsp_username', gspUsername);
-    localStorage.setItem('irp_gsp_password', gspPassword);
-    localStorage.setItem('irp_client_id', clientId);
-    localStorage.setItem('irp_client_secret', clientSecret);
-    localStorage.setItem('irp_bypass_cancellation_limit', String(isBypassCancellationLimit));
+    safeStorage.setItem('irp_gsp_provider', gspProvider);
+    safeStorage.setItem('irp_env', irpEnv);
+    safeStorage.setItem('irp_gsp_username', gspUsername);
+    safeStorage.setItem('irp_gsp_password', gspPassword);
+    safeStorage.setItem('irp_client_id', clientId);
+    safeStorage.setItem('irp_client_secret', clientSecret);
+    safeStorage.setItem('irp_bypass_cancellation_limit', String(isBypassCancellationLimit));
     showToast('IRP Gateway Credentials Saved Successfully!');
   };
 
@@ -97,8 +98,8 @@ export default function EInvoicePage() {
       const timeStr = new Date().toLocaleString();
       setApiLatency(latency);
       setLastVerifiedTime(timeStr);
-      localStorage.setItem('irp_api_latency', String(latency));
-      localStorage.setItem('irp_last_verified', timeStr);
+      safeStorage.setItem('irp_api_latency', String(latency));
+      safeStorage.setItem('irp_last_verified', timeStr);
       setTestHandshakeResult('SUCCESS');
       showToast('IRP Connection Handshake Successful! Latency: ' + latency + 'ms');
     }

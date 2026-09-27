@@ -580,7 +580,11 @@ export const ENTERPRISE_BRANCHES_BY_TENANT: Record<string, BranchDetailsItem[]> 
       contactEmail: 'rajesh.sharma@acmetech.com',
       contactPhone: '+91 98200 11223',
       status: 'ACTIVE',
-      annualTurnoverContributionPct: 55
+      annualTurnoverContributionPct: 55,
+      costCenterCode: 'CC-MUM-101',
+      costCenterName: 'Corporate Management & Tech HQ',
+      description: 'Primary corporate headquarters overseeing West zone compliance and IT operations',
+      budgetAllocation: 150000000
     },
     {
       id: 'b2',
@@ -595,7 +599,11 @@ export const ENTERPRISE_BRANCHES_BY_TENANT: Record<string, BranchDetailsItem[]> 
       contactEmail: 'suresh.patil@acmetech.com',
       contactPhone: '+91 98220 44556',
       status: 'ACTIVE',
-      annualTurnoverContributionPct: 20
+      annualTurnoverContributionPct: 20,
+      costCenterCode: 'CC-PUN-102',
+      costCenterName: 'Software Engineering & Cloud Dev',
+      description: 'Engineering development lab for cloud platforms and enterprise integrations',
+      budgetAllocation: 60000000
     },
     {
       id: 'b3',
@@ -610,7 +618,11 @@ export const ENTERPRISE_BRANCHES_BY_TENANT: Record<string, BranchDetailsItem[]> 
       contactEmail: 'vikas.gupta@acmetech.com',
       contactPhone: '+91 98110 33445',
       status: 'ACTIVE',
-      annualTurnoverContributionPct: 15
+      annualTurnoverContributionPct: 15,
+      costCenterCode: 'CC-DEL-103',
+      costCenterName: 'North Zone Commercial Hub',
+      description: 'Northern regional sales, client servicing and government accounts liaison',
+      budgetAllocation: 45000000
     },
     {
       id: 'b4',
@@ -625,7 +637,11 @@ export const ENTERPRISE_BRANCHES_BY_TENANT: Record<string, BranchDetailsItem[]> 
       contactEmail: 'deepa.hegde@acmetech.com',
       contactPhone: '+91 98450 66778',
       status: 'ACTIVE',
-      annualTurnoverContributionPct: 10
+      annualTurnoverContributionPct: 10,
+      costCenterCode: 'CC-BLR-104',
+      costCenterName: 'SEZ Zero-Rated Tech Export',
+      description: 'Dedicated SEZ unit for international software export and zero-rated supplies',
+      budgetAllocation: 30000000
     }
   ],
   't2': [
@@ -642,7 +658,11 @@ export const ENTERPRISE_BRANCHES_BY_TENANT: Record<string, BranchDetailsItem[]> 
       contactEmail: 'manpreet@globex.in',
       contactPhone: '+91 98760 12345',
       status: 'ACTIVE',
-      annualTurnoverContributionPct: 60
+      annualTurnoverContributionPct: 60,
+      costCenterCode: 'CC-CHD-201',
+      costCenterName: 'Foundry & Heavy Tooling Works',
+      description: 'Precision machining plant and casting foundry',
+      budgetAllocation: 110000000
     },
     {
       id: 'b2-2',
@@ -657,7 +677,11 @@ export const ENTERPRISE_BRANCHES_BY_TENANT: Record<string, BranchDetailsItem[]> 
       contactEmail: 'pooja.verma@globex.in',
       contactPhone: '+91 98120 54321',
       status: 'ACTIVE',
-      annualTurnoverContributionPct: 40
+      annualTurnoverContributionPct: 40,
+      costCenterCode: 'CC-GGN-202',
+      costCenterName: 'Corporate Strategy & Procurement',
+      description: 'Corporate executive headquarters and vendor contracts administration',
+      budgetAllocation: 72000000
     }
   ],
   't3': [

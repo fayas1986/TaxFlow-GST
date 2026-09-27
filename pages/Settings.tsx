@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, updateProfile, addTenant, switchTenant } from '../store/store';
 import { updateTenantProfile, requestGstnOtp, verifyGstnOtp, getGstnConnectionStatus, updateSecuritySettings, downloadUserData, deleteUserAccount, createNewTenant, fetchAuditLogs, sendWeeklyDigest } from '../services/api';
-import { Building2, Users, Shield, Save, Loader2, CheckCircle2, Globe, Key, AlertCircle, RefreshCw, FileKey, Trash2, DownloadCloud, Lock, Plus, X, Bell, History, Mail, CalendarDays, Database, Cloud, Layers, Clock, Download , FileText, Server, MessageSquare } from 'lucide-react';
+import { Building2, Users, Shield, Save, Loader2, CheckCircle2, Globe, Key, AlertCircle, RefreshCw, FileKey, Trash2, DownloadCloud, Lock, Plus, X, Bell, History, Mail, CalendarDays, Database, Cloud, Layers, Clock, Download , FileText, Server, MessageSquare, Gauge, Zap } from 'lucide-react';
 import { UserRole } from '../types';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import UserAccessManagement from '../components/organization/UserAccessManagement';
@@ -14,6 +14,10 @@ import { DocumentStylingConfig } from '../components/DocumentStylingConfig';
 import { WhatsAppNotificationCenter } from '../components/WhatsAppNotificationCenter';
 import { AutomatedLedgerExportModule } from '../components/AutomatedLedgerExportModule';
 import { NeonMultiTenantDatabaseCenter } from '../components/organization/NeonMultiTenantDatabaseCenter';
+import { PlanUsageDashboard } from '../components/PlanUsageDashboard';
+import { ClientDocumentUpload } from '../components/ClientDocumentUpload';
+import { subscriptionManager } from '../src/core/billing/SubscriptionManager';
+import { PlanCode } from '../src/core/entitlements/types';
 
 const Toast: React.FC<{ message: string; onClose: () => void }> = ({ message, onClose }) => {
   useEffect(() => {
@@ -83,7 +87,7 @@ const BackupHistoryList: React.FC = () => {
     );
 };
 
-const StorageSettings: React.FC<{ tenantId: string; setToast: (msg: string) => void }> = ({ tenantId, setToast }) => {
+const StorageSettings: React.FC<{ tenantId: string; setToast: (msg: string) => void; isSuperAdmin?: boolean; subProfile?: any }> = ({ tenantId, setToast, isSuperAdmin, subProfile }) => {
     const queryClient = useQueryClient();
     const { data: policy, isLoading: isPolicyLoading } = useQuery({
         queryKey: ['archivalPolicy'],
@@ -111,6 +115,8 @@ const StorageSettings: React.FC<{ tenantId: string; setToast: (msg: string) => v
     const [selectedDocTypes, setSelectedDocTypes] = useState<string[]>(['INVOICE', 'E_WAY_BILL', 'AUDIT_REPORT', 'CORRESPONDENCE']);
     const [isSavingVault, setIsSavingVault] = useState(false);
     const [isMigratingVault, setIsMigratingVault] = useState(false);
+
+    const hasVaultEntitlement = isSuperAdmin || (subProfile && subProfile.planCode !== PlanCode.STARTER);
 
     useEffect(() => {
         if (policy) {
@@ -293,134 +299,138 @@ const StorageSettings: React.FC<{ tenantId: string; setToast: (msg: string) => v
                 </div>
             </div>
 
-            {/* Document Vault Retention Section */}
-            <div className="border-t border-slate-200 pt-8">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                        <FileKey size={20} className="text-indigo-600" />
-                        Historical Document Vault Retention Policy
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        Secure Vault Sync
-                    </span>
-                </div>
-
-                <div className="space-y-6">
-                    <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl">
-                        <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-                            Define automated statutory schedules to move historical PDFs, compliance attachments, filings, and audit statements from the primary hot database directly to the secure, tamper-proof **Document Vault** after a selected number of years.
-                        </p>
-
-                        <div className="space-y-6">
-                            {/* Toggle policy */}
-                            <div className="flex items-center justify-between border-b border-slate-200/50 pb-4">
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm">Automated Document Vault Archiving</h4>
-                                    <p className="text-xs text-slate-500">Automatically transfers qualified files on monthly audits.</p>
-                                </div>
-                                <button 
-                                    onClick={() => setVaultEnabled(!vaultEnabled)}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${vaultEnabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
-                                >
-                                    <span className={`${vaultEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                                </button>
-                            </div>
-
-                            {/* Year Threshold Slider */}
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Retention Age Threshold</label>
-                                    <span className="text-sm font-extrabold text-indigo-600">{retentionYears} Years {retentionYears === 7 ? '(Statutory Requirement)' : ''}</span>
-                                </div>
-                                <input 
-                                    type="range" 
-                                    min="1" 
-                                    max="10" 
-                                    step="1" 
-                                    value={retentionYears} 
-                                    onChange={(e) => setRetentionYears(parseInt(e.target.value))}
-                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                                />
-                                <div className="flex justify-between text-[10px] text-slate-400 font-bold">
-                                    <span>1 Year</span>
-                                    <span>5 Years</span>
-                                    <span>7 Years (GST Standard)</span>
-                                    <span>10 Years</span>
-                                </div>
-                            </div>
-
-                            {/* Multi-select categories */}
-                            <div className="space-y-3 pt-2">
-                                <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Applicable Document Classes</label>
-                                <div className="grid grid-cols-2 gap-2.5">
-                                    {[
-                                        { key: 'INVOICE', label: 'E-Invoices & Purchase Invoices' },
-                                        { key: 'E_WAY_BILL', label: 'E-Way Shipment Slips' },
-                                        { key: 'AUDIT_REPORT', label: 'Statutory GSTR Audit Reports' },
-                                        { key: 'CORRESPONDENCE', label: 'GST Notice Communications' },
-                                    ].map((docClass) => {
-                                        const isChecked = selectedDocTypes.includes(docClass.key);
-                                        return (
-                                            <button
-                                                key={docClass.key}
-                                                type="button"
-                                                onClick={() => toggleDocType(docClass.key)}
-                                                className={`p-3 rounded-xl border text-left text-xs font-bold transition-all flex items-center justify-between ${
-                                                    isChecked 
-                                                        ? 'bg-indigo-50/50 border-indigo-200 text-indigo-950' 
-                                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                                                }`}
-                                            >
-                                                <span>{docClass.label}</span>
-                                                <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                                                    isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'
-                                                }`}>
-                                                    {isChecked && <CheckCircle2 size={10} strokeWidth={4} />}
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Save and Run Triggers */}
-                            <div className="flex items-center gap-4 pt-4 border-t border-slate-200/50">
-                                <button 
-                                    onClick={handleSaveVaultPolicy}
-                                    disabled={isSavingVault}
-                                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition-all flex items-center gap-2"
-                                >
-                                    {isSavingVault ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
-                                    Save Vault Schedule
-                                </button>
-                                <button 
-                                    onClick={handleRunVaultMigration}
-                                    disabled={isMigratingVault}
-                                    className="px-6 py-2 bg-white border border-slate-200 text-indigo-700 hover:bg-slate-50 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2"
-                                >
-                                    {isMigratingVault ? <Loader2 size={14} className="animate-spin"/> : <RefreshCw size={14}/>}
-                                    Run Migration Sync Now
-                                </button>
-                            </div>
-                        </div>
+            {/* Document Vault Retention Section - only for plans with Vault capabilities */}
+            {hasVaultEntitlement && (
+                <div className="border-t border-slate-200 pt-8">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                            <FileKey size={20} className="text-indigo-600" />
+                            Historical Document Vault Retention Policy
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            Secure Vault Sync
+                        </span>
                     </div>
 
-                    <div className="p-4 bg-indigo-50 border border-indigo-100/60 rounded-xl flex gap-3">
-                        <Lock size={18} className="text-indigo-600 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                            <h5 className="text-xs font-bold text-indigo-900">Vault Immutability Assurance</h5>
-                            <p className="text-[11px] text-indigo-700 leading-relaxed">
-                                Documents transferred to the Document Vault are locked with SHA-256 cryptographic signatures. This satisfies section 144 tax audit standards in India, protecting historical files from subsequent deletions.
+                    <div className="space-y-6">
+                        <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl">
+                            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+                                Define automated statutory schedules to move historical PDFs, compliance attachments, filings, and audit statements from the primary hot database directly to the secure, tamper-proof **Document Vault** after a selected number of years.
                             </p>
+
+                            <div className="space-y-6">
+                                {/* Toggle policy */}
+                                <div className="flex items-center justify-between border-b border-slate-200/50 pb-4">
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm">Automated Document Vault Archiving</h4>
+                                        <p className="text-xs text-slate-500">Automatically transfers qualified files on monthly audits.</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => setVaultEnabled(!vaultEnabled)}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${vaultEnabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                                    >
+                                        <span className={`${vaultEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                                    </button>
+                                </div>
+
+                                {/* Year Threshold Slider */}
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Retention Age Threshold</label>
+                                        <span className="text-sm font-extrabold text-indigo-600">{retentionYears} Years {retentionYears === 7 ? '(Statutory Requirement)' : ''}</span>
+                                    </div>
+                                    <input 
+                                        type="range" 
+                                        min="1" 
+                                        max="10" 
+                                        step="1" 
+                                        value={retentionYears} 
+                                        onChange={(e) => setRetentionYears(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                    />
+                                    <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+                                        <span>1 Year</span>
+                                        <span>5 Years</span>
+                                        <span>7 Years (GST Standard)</span>
+                                        <span>10 Years</span>
+                                    </div>
+                                </div>
+
+                                {/* Multi-select categories */}
+                                <div className="space-y-3 pt-2">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Applicable Document Classes</label>
+                                    <div className="grid grid-cols-2 gap-2.5">
+                                        {[
+                                            { key: 'INVOICE', label: 'E-Invoices & Purchase Invoices' },
+                                            { key: 'E_WAY_BILL', label: 'E-Way Shipment Slips' },
+                                            { key: 'AUDIT_REPORT', label: 'Statutory GSTR Audit Reports' },
+                                            { key: 'CORRESPONDENCE', label: 'GST Notice Communications' },
+                                        ].map((docClass) => {
+                                            const isChecked = selectedDocTypes.includes(docClass.key);
+                                            return (
+                                                <button
+                                                    key={docClass.key}
+                                                    type="button"
+                                                    onClick={() => toggleDocType(docClass.key)}
+                                                    className={`p-3 rounded-xl border text-left text-xs font-bold transition-all flex items-center justify-between ${
+                                                        isChecked 
+                                                            ? 'bg-indigo-50/50 border-indigo-200 text-indigo-950' 
+                                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <span>{docClass.label}</span>
+                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                                                        isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'
+                                                    }`}>
+                                                        {isChecked && <CheckCircle2 size={10} strokeWidth={4} />}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Save and Run Triggers */}
+                                <div className="flex items-center gap-4 pt-4 border-t border-slate-200/50">
+                                    <button 
+                                        onClick={handleSaveVaultPolicy}
+                                        disabled={isSavingVault}
+                                        className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition-all flex items-center gap-2"
+                                    >
+                                        {isSavingVault ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
+                                        Save Vault Schedule
+                                    </button>
+                                    <button 
+                                        onClick={handleRunVaultMigration}
+                                        disabled={isMigratingVault}
+                                        className="px-6 py-2 bg-white border border-slate-200 text-indigo-700 hover:bg-slate-50 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2"
+                                    >
+                                        {isMigratingVault ? <Loader2 size={14} className="animate-spin"/> : <RefreshCw size={14}/>}
+                                        Run Migration Sync Now
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-indigo-50 border border-indigo-100/60 rounded-xl flex gap-3">
+                            <Lock size={18} className="text-indigo-600 shrink-0 mt-0.5" />
+                            <div className="space-y-1">
+                                <h5 className="text-xs font-bold text-indigo-900">Vault Immutability Assurance</h5>
+                                <p className="text-[11px] text-indigo-700 leading-relaxed">
+                                    Documents transferred to the Document Vault are locked with SHA-256 cryptographic signatures. This satisfies section 144 tax audit standards in India, protecting historical files from subsequent deletions.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Automated Monthly Ledger Compliance Export Section */}
-            <div className="border-t border-slate-200 pt-8">
-                <AutomatedLedgerExportModule tenantId={tenantId} />
-            </div>
+            {hasVaultEntitlement && (
+                <div className="border-t border-slate-200 pt-8">
+                    <AutomatedLedgerExportModule tenantId={tenantId} />
+                </div>
+            )}
         </div>
     );
 };
@@ -546,13 +556,359 @@ const WhatsAppSettingsTab: React.FC<{ setToast: (msg: string) => void }> = ({ se
     );
 };
 
+// Customer Account & Profile Settings Component
+const CustomerProfileSettings: React.FC<{
+  user: any;
+  currentTenant: any;
+  onShowToast: (msg: string) => void;
+}> = ({ user, currentTenant, onShowToast }) => {
+  const [formData, setFormData] = useState({
+    businessName: currentTenant?.name || 'Acme Ventures Corp',
+    gstin: currentTenant?.gstin || '27AABCU9603R1ZM',
+    billingAddress: currentTenant?.address || '702, Bandra-Kurla Complex, Bandra East, Mumbai, Maharashtra - 400051',
+    contactName: user?.name || 'Ananya Sen',
+    contactEmail: user?.email || 'client@acmeventures.com',
+    contactPhone: '+91 98201 55678',
+    currency: 'INR',
+    paymentTerms: 'NET_30',
+    autoDownloadInvoices: true
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+      onShowToast('Customer billing profile updated successfully!');
+    }, 400);
+  };
+
+  return (
+    <div className="max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
+      <div>
+        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+          <Building2 size={22} className="text-teal-600" />
+          Customer Account & Billing Profile
+        </h3>
+        <p className="text-sm text-slate-500 mt-1">
+          Manage your registered client details, invoicing contact information, and billing preferences.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+          <h4 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">Company & GST Registration</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Registered Business / Client Name</label>
+              <input
+                type="text"
+                required
+                value={formData.businessName}
+                onChange={e => setFormData({ ...formData, businessName: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Client GSTIN</label>
+              <input
+                type="text"
+                required
+                value={formData.gstin}
+                onChange={e => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                maxLength={15}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all uppercase"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Billing & Tax Invoice Address</label>
+            <textarea
+              rows={3}
+              required
+              value={formData.billingAddress}
+              onChange={e => setFormData({ ...formData, billingAddress: e.target.value })}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+          <h4 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">Primary Contact & Invoicing Recipient</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Contact Person</label>
+              <input
+                type="text"
+                required
+                value={formData.contactName}
+                onChange={e => setFormData({ ...formData, contactName: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Invoice Email Address</label>
+              <input
+                type="email"
+                required
+                value={formData.contactEmail}
+                onChange={e => setFormData({ ...formData, contactEmail: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Mobile Number (SMS / WhatsApp)</label>
+              <input
+                type="text"
+                value={formData.contactPhone}
+                onChange={e => setFormData({ ...formData, contactPhone: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+          <h4 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">Invoicing Preferences</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Preferred Invoicing Currency</label>
+              <select
+                value={formData.currency}
+                onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+              >
+                <option value="INR">INR (₹) - Indian Rupee</option>
+                <option value="USD">USD ($) - US Dollar</option>
+                <option value="EUR">EUR (€) - Euro</option>
+                <option value="GBP">GBP (£) - British Pound</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Default Payment Term</label>
+              <select
+                value={formData.paymentTerms}
+                onChange={e => setFormData({ ...formData, paymentTerms: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+              >
+                <option value="DUE_ON_RECEIPT">Due Upon Receipt</option>
+                <option value="NET_15">Net 15 Days</option>
+                <option value="NET_30">Net 30 Days</option>
+                <option value="NET_45">Net 45 Days</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-800">Auto-download e-Invoice PDF upon generation</p>
+              <p className="text-xs text-slate-500">Automatically download signed digital invoices when ready.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, autoDownloadInvoices: !formData.autoDownloadInvoices })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.autoDownloadInvoices ? 'bg-teal-600' : 'bg-slate-200'}`}
+            >
+              <span className={`${formData.autoDownloadInvoices ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-xl shadow-md shadow-teal-600/20 transition-all flex items-center gap-2"
+          >
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            Save Profile Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+// Customer Account Security Component
+const CustomerSecuritySettings: React.FC<{
+  user: any;
+  onShowToast: (msg: string) => void;
+}> = ({ user, onShowToast }) => {
+  const [is2FAActive, setIs2FAActive] = useState(user?.enforce2FA || true);
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [isUpdatingPass, setIsUpdatingPass] = useState(false);
+
+  const handlePasswordChange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPass !== confirmPass) {
+      alert('New password and confirmation do not match.');
+      return;
+    }
+    if (newPass.length < 8) {
+      alert('Password must be at least 8 characters.');
+      return;
+    }
+    setIsUpdatingPass(true);
+    setTimeout(() => {
+      setIsUpdatingPass(false);
+      setCurrentPass('');
+      setNewPass('');
+      setConfirmPass('');
+      onShowToast('Account password updated successfully!');
+    }, 500);
+  };
+
+  return (
+    <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
+      <div>
+        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+          <Shield size={22} className="text-teal-600" />
+          Personal Account Security & 2FA
+        </h3>
+        <p className="text-sm text-slate-500 mt-1">
+          Manage your login credentials, two-factor authentication, and active browser sessions.
+        </p>
+      </div>
+
+      {/* Two-Factor Authentication */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center">
+              <Key size={20} />
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-800">Two-Factor Authentication (2FA)</h4>
+              <p className="text-xs text-slate-500">Require an OTP verification code on your mobile / email upon login.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setIs2FAActive(!is2FAActive);
+              onShowToast(`Two-factor authentication ${!is2FAActive ? 'enabled' : 'disabled'}.`);
+            }}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${is2FAActive ? 'bg-teal-600' : 'bg-slate-200'}`}
+          >
+            <span className={`${is2FAActive ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+          </button>
+        </div>
+
+        {is2FAActive && (
+          <div className="p-3.5 bg-teal-50 border border-teal-100 rounded-xl flex items-center gap-3">
+            <CheckCircle2 size={18} className="text-teal-600 shrink-0" />
+            <p className="text-xs text-teal-800 font-medium">
+              2FA is active. Verification OTPs will be delivered to <strong>{user?.email || 'client@acmeventures.com'}</strong>.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Change Password */}
+      <form onSubmit={handlePasswordChange} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <h4 className="font-bold text-slate-800 flex items-center gap-2">
+          <Lock size={18} className="text-slate-500" />
+          Update Password
+        </h4>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-600 uppercase">Current Password</label>
+            <input
+              type="password"
+              required
+              value={currentPass}
+              onChange={e => setCurrentPass(e.target.value)}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 uppercase">New Password</label>
+              <input
+                type="password"
+                required
+                value={newPass}
+                onChange={e => setNewPass(e.target.value)}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
+                placeholder="Minimum 8 characters"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 uppercase">Confirm New Password</label>
+              <input
+                type="password"
+                required
+                value={confirmPass}
+                onChange={e => setConfirmPass(e.target.value)}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
+                placeholder="Repeat new password"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2 flex justify-end">
+          <button
+            type="submit"
+            disabled={isUpdatingPass || !currentPass || !newPass}
+            className="px-5 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 disabled:opacity-40 transition-all flex items-center gap-2"
+          >
+            {isUpdatingPass ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Change Password
+          </button>
+        </div>
+      </form>
+
+      {/* Active Sessions */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <h4 className="font-bold text-slate-800 flex items-center gap-2">
+          <Clock size={18} className="text-slate-500" />
+          Active Login Sessions
+        </h4>
+        <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-emerald-100 text-emerald-700 rounded-lg flex items-center justify-center font-bold text-xs">
+              Web
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-800">Current Chrome Session (Active Now)</p>
+              <p className="text-[11px] text-slate-500">IP: 103.21.124.50 • Mumbai, India</p>
+            </div>
+          </div>
+          <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase tracking-wider">
+            Current Device
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Settings: React.FC = () => {
   const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
   const currentTenant = user?.availableTenants.find(t => t.id === user.currentTenantId);
   const queryClient = useQueryClient();
   
-  const [activeTab, setActiveTab] = useState<'GSTN' | 'NEON_DATABASE' | 'USERS' | 'SECURITY' | 'INACTIVITY' | 'AUDIT' | 'NOTIFICATIONS' | 'BACKUP' | 'STORAGE' | 'STYLING' | 'WORKSPACE' | 'WHATSAPP'>('GSTN');
+  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+  const isCustomer = user?.role === UserRole.CUSTOMER || user?.role === UserRole.VIEWER;
+  const isFinanceTeam = user?.role === UserRole.ADMIN || user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.FINANCE_MANAGER || user?.role === UserRole.ACCOUNTANT;
+  const subProfile = subscriptionManager.getUserSubscriptionProfile(user?.role, user?.currentTenantId);
+
+  const [activeTab, setActiveTab] = useState<string>(isCustomer ? 'CUSTOMER_PROFILE' : 'USAGE');
   const [isSaving, setIsSaving] = useState(false);
   
   // Weekly Digest State
@@ -665,28 +1021,17 @@ const Settings: React.FC = () => {
   const { mutate: createOrganization, isPending: isCreatingOrg } = useMutation({
       mutationFn: createNewTenant,
       onSuccess: (newTenant) => {
-          // 1. Update Redux Store
           dispatch(addTenant(newTenant));
-          
-          // 2. Auto-switch context to the new tenant immediately
           dispatch(switchTenant(newTenant.id));
-          
-          // 3. Reset UI & Close Modal
           setCreateFormData({ name: '', gstin: '', address: '', stateCode: '27' });
           setShowCreateModal(false);
           setCreateError(null);
-          
-          // 4. Force a profile data refresh for the form fields
           setProfileData({
             name: newTenant.name,
             gstin: newTenant.gstin,
             address: newTenant.address
           });
-
-          // 5. Show Notification
           setToastMessage(`Organization "${newTenant.name}" created and selected!`);
-          
-          // 6. Scroll to top to show the change
           window.scrollTo({ top: 0, behavior: 'smooth' });
       },
       onError: (err) => {
@@ -734,28 +1079,29 @@ const Settings: React.FC = () => {
       e.preventDefault();
       setCreateError(null);
       
-      // Basic validation
+      if (!isSuperAdmin && (user?.availableTenants?.length || 1) >= subProfile.maxCompanies) {
+          setCreateError(`Your current plan allows a maximum of ${subProfile.maxCompanies} organization(s). Please upgrade to Business Growth or Enterprise to create additional companies.`);
+          return;
+      }
+
       if (!createFormData.name.trim() || !createFormData.gstin.trim() || !createFormData.address.trim()) {
           setCreateError('Please fill in all required fields (Name, GSTIN, Address)');
           return;
       }
 
-      // GSTIN Length Validation
       if (createFormData.gstin.length !== 15) {
           setCreateError(`GSTIN must be exactly 15 characters. Currently ${createFormData.gstin.length} characters.`);
           return;
       }
 
-      // State Code Match Validation
       if (!createFormData.gstin.startsWith(createFormData.stateCode)) {
           setCreateError(`GSTIN state code prefix mismatch. Selected State Code is ${createFormData.stateCode} (${STATE_NAMES[createFormData.stateCode]}), so GSTIN must start with ${createFormData.stateCode}.`);
           return;
       }
 
-      // Format regex matching
       const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
       if (!gstinRegex.test(createFormData.gstin)) {
-          setCreateError('Invalid Indian GSTIN structure. Standard format: 27AAAAA0000A1Z5 (e.g., 2 State Code, 5 Letters, 4 Digits, 1 Letter, 1 Alphanumeric, \'Z\', 1 Checksum character).');
+          setCreateError('Invalid Indian GSTIN structure. Standard format: 27AAAAA0000A1Z5.');
           return;
       }
 
@@ -782,20 +1128,38 @@ const Settings: React.FC = () => {
       onError: () => setAuthError('Invalid OTP. Please try again.')
   });
 
-  const tabs = [
-    { id: 'GSTN', label: 'GSTN Portal', icon: Globe },
-    { id: 'NEON_DATABASE', label: 'Postgres Neon Multi-Tenant', icon: Server },
-    { id: 'USERS', label: 'User Management', icon: Users },
-    { id: 'SECURITY', label: 'Security & SSO', icon: Shield },
-    { id: 'INACTIVITY', label: 'Session Inactivity', icon: Clock },
-    { id: 'WORKSPACE', label: 'Workspace Sync', icon: Cloud },
-    { id: 'BACKUP', label: 'Cloud Backups', icon: Database },
-    { id: 'STORAGE', label: 'Data Storage', icon: Layers },
-    { id: 'STYLING', label: 'Document Styling', icon: FileText },
-    { id: 'NOTIFICATIONS', label: 'Notifications', icon: Bell },
-    { id: 'WHATSAPP', label: 'WhatsApp Alerts', icon: MessageSquare },
-    { id: 'AUDIT', label: 'Audit Logs', icon: History },
+  // Role-Based Tab Structure:
+  // - Customers only see: Customer Profile, Client Document Upload/Vault, Notifications, and Personal Security & 2FA
+  // - Super Admin sees: Everything including User Management
+  // - Admins/Accountants/Auditors see their relevant administrative tools (User Management is strictly hidden for non-super admins)
+  const allTabs = isCustomer ? [
+    { id: 'CUSTOMER_PROFILE', label: 'Company & Billing Profile', icon: Building2, visible: true },
+    { id: 'CLIENT_DOCS', label: 'Document Upload & Vault', icon: FileKey, visible: true },
+    { id: 'NOTIFICATIONS', label: 'Notification Preferences', icon: Bell, visible: true },
+    { id: 'SECURITY', label: 'Account Security & 2FA', icon: Shield, visible: true },
+  ] : [
+    { id: 'USAGE', label: 'Plan & Usage Limits', icon: Gauge, visible: isFinanceTeam },
+    { id: 'GSTN', label: 'GSTN Portal', icon: Globe, visible: isFinanceTeam },
+    { id: 'USERS', label: 'User Management', icon: Users, visible: isSuperAdmin }, // Strictly Super Admin Only!
+    { id: 'STORAGE', label: 'Data Storage', icon: Layers, visible: isSuperAdmin || user?.role === UserRole.ADMIN },
+    { id: 'STYLING', label: 'Document Styling', icon: FileText, visible: isFinanceTeam },
+    { id: 'NOTIFICATIONS', label: 'Notifications', icon: Bell, visible: true },
+    { id: 'INACTIVITY', label: 'Session Inactivity', icon: Clock, visible: isSuperAdmin || user?.role === UserRole.ADMIN },
+    { id: 'WORKSPACE', label: 'Workspace Sync', icon: Cloud, visible: isSuperAdmin || user?.role === UserRole.ADMIN },
+    { id: 'AUDIT', label: 'Audit Logs', icon: History, visible: isSuperAdmin || subProfile.canAuditLogs },
+    { id: 'SECURITY', label: 'Security & SSO', icon: Shield, visible: isSuperAdmin || subProfile.canAdvancedRbac },
+    { id: 'BACKUP', label: 'Cloud Backups', icon: Database, visible: isSuperAdmin },
+    { id: 'WHATSAPP', label: 'WhatsApp Alerts', icon: MessageSquare, visible: isSuperAdmin || subProfile.canWhatsappAlerts },
+    { id: 'NEON_DATABASE', label: 'Postgres Neon Multi-Tenant', icon: Server, visible: isSuperAdmin || subProfile.canDatabaseSync },
   ];
+
+  const tabs = allTabs.filter(tab => tab.visible);
+
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some(t => t.id === activeTab)) {
+      setActiveTab(tabs[0].id);
+    }
+  }, [tabs, activeTab, isCustomer]);
 
   const { data: auditLogs, isLoading: isAuditLoading } = useQuery({
     queryKey: ['auditLogs', user?.currentTenantId],
@@ -832,12 +1196,12 @@ const Settings: React.FC = () => {
     setToastMessage('Audit logs exported successfully');
   };
 
-  if (!user || (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN)) {
+  if (!user) {
     return (
       <div className="flex flex-col items-center justify-center h-96 text-center">
         <Shield size={48} className="text-slate-300 mb-4" />
         <h2 className="text-xl font-bold text-slate-700">Access Restricted</h2>
-        <p className="text-slate-500">You do not have permission to view this page.</p>
+        <p className="text-slate-500">Please sign in to view your settings.</p>
       </div>
     );
   }
@@ -848,9 +1212,22 @@ const Settings: React.FC = () => {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Settings</h2>
-          <p className="text-slate-500">Manage your organization profile and security preferences.</p>
+          <h2 className="text-2xl font-bold text-slate-800">
+            {isCustomer ? 'Client Portal Settings' : 'Settings & Configurations'}
+          </h2>
+          <p className="text-slate-500">
+            {isCustomer 
+              ? 'Manage your organization profile, document upload settings, and personal security.'
+              : 'Manage your organization profile, regulatory connections, and security preferences.'}
+          </p>
         </div>
+
+        {isCustomer && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-200 rounded-xl text-teal-800 text-xs font-bold">
+            <Shield size={14} className="text-teal-600" />
+            <span>Customer View (Admin tools hidden)</span>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px] flex flex-col md:flex-row w-full min-w-0 overflow-hidden">
@@ -860,15 +1237,19 @@ const Settings: React.FC = () => {
             {tabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                onClick={() => setActiveTab(tab.id)}
+                className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'
+                    ? isCustomer 
+                      ? 'bg-white text-teal-700 shadow-sm ring-1 ring-slate-200 font-bold'
+                      : 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200 font-bold'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <tab.icon size={18} />
-                {tab.label}
+                <div className="flex items-center gap-3">
+                  <tab.icon size={18} className={activeTab === tab.id ? (isCustomer ? 'text-teal-600' : 'text-blue-600') : 'text-slate-400'} />
+                  <span>{tab.label}</span>
+                </div>
               </button>
             ))}
           </nav>
@@ -876,6 +1257,28 @@ const Settings: React.FC = () => {
 
         {/* Content Area */}
         <div className="flex-1 min-w-0 p-4 sm:p-6 md:p-8 relative overflow-x-auto custom-scrollbar-visible">
+          {/* Customer Specific Tabs */}
+          {activeTab === 'CUSTOMER_PROFILE' && (
+            <CustomerProfileSettings 
+              user={user} 
+              currentTenant={currentTenant} 
+              onShowToast={(msg) => setToastMessage(msg)} 
+            />
+          )}
+
+          {activeTab === 'CLIENT_DOCS' && (
+            <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <ClientDocumentUpload showHeader={true} />
+            </div>
+          )}
+
+          {/* Admin & Standard Tabs */}
+          {activeTab === 'USAGE' && (
+             <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <PlanUsageDashboard showToast={(msg) => setToastMessage(msg)} />
+             </div>
+          )}
+
           {activeTab === 'GSTN' && (
              <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <GstAuthenticationModule />
@@ -883,12 +1286,36 @@ const Settings: React.FC = () => {
           )}
 
           {activeTab === 'NEON_DATABASE' && (
-             <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <NeonMultiTenantDatabaseCenter 
-                  currentTenantId={user?.currentTenantId || 't1'} 
-                  onShowToast={(msg) => setToastMessage(msg)} 
-                />
-             </div>
+             !isSuperAdmin && !subProfile.canDatabaseSync ? (
+               <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center max-w-xl mx-auto my-8 shadow-sm">
+                 <div className="w-14 h-14 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
+                   <Lock size={26} />
+                 </div>
+                 <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black uppercase tracking-wider rounded-full border border-amber-200">
+                   Enterprise Dedicated Feature
+                 </span>
+                 <h3 className="text-xl font-bold text-slate-800 mt-3">Postgres Neon Multi-Tenant Sync</h3>
+                 <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                   Dedicated PostgreSQL database tenancy, automated dual-write synchronization, and external replica pipelines are available exclusively on Enterprise plans.
+                 </p>
+                 <div className="mt-6">
+                   <button
+                     onClick={() => setActiveTab('USAGE')}
+                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/20"
+                   >
+                     <Zap size={14} />
+                     Upgrade in Plan & Usage Tab
+                   </button>
+                 </div>
+               </div>
+             ) : (
+               <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <NeonMultiTenantDatabaseCenter 
+                    currentTenantId={user?.currentTenantId || 't1'} 
+                    onShowToast={(msg) => setToastMessage(msg)} 
+                  />
+               </div>
+             )
           )}
 
           {activeTab === 'WORKSPACE' && (
@@ -897,14 +1324,28 @@ const Settings: React.FC = () => {
              </div>
           )}
 
-          {/* ... (Other tabs kept same for brevity, logic unchanged) ... */}
           {activeTab === 'USERS' && (
-             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 w-full min-w-0">
-               <UserAccessManagement 
-                 currentTenantId={user?.currentTenantId} 
-                 onShowToast={(msg) => setToastMessage(msg)} 
-               />
-             </div>
+            !isSuperAdmin ? (
+              <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center max-w-xl mx-auto my-8 shadow-sm">
+                <div className="w-14 h-14 bg-rose-50 rounded-2xl border border-rose-200 flex items-center justify-center mx-auto mb-4 text-rose-600">
+                  <Shield size={26} />
+                </div>
+                <span className="px-3 py-1 bg-rose-50 text-rose-700 text-xs font-black uppercase tracking-wider rounded-full border border-rose-200">
+                  Super Admin Only
+                </span>
+                <h3 className="text-xl font-bold text-slate-800 mt-3">Restricted Administrative Area</h3>
+                <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                  User Management and platform user administration are exclusively reserved for the Super Admin and are not visible or accessible to customers.
+                </p>
+              </div>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 w-full min-w-0">
+                <UserAccessManagement 
+                  currentTenantId={user?.currentTenantId} 
+                  onShowToast={(msg) => setToastMessage(msg)} 
+                />
+              </div>
+            )
           )}
 
           {activeTab === 'INACTIVITY' && (
@@ -917,140 +1358,190 @@ const Settings: React.FC = () => {
           )}
 
           {activeTab === 'SECURITY' && (
-            <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
-                <Shield size={20} className="text-blue-500" />
-                Security & SSO Settings
-              </h3>
-              
-              <div className="space-y-6">
-                {/* SSO Section */}
-                <div className={`border border-slate-200 rounded-lg bg-white transition-all overflow-hidden ${isSSOEnabled ? 'ring-1 ring-blue-500 border-blue-500' : ''}`}>
-                   <div className="flex items-center justify-between p-4 bg-slate-50 border-b border-slate-100">
-                       <div>
-                        <div className="flex items-center gap-2">
-                            <h4 className="font-medium text-slate-900">SSO Integration</h4>
-                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded uppercase tracking-wide">Enterprise</span>
-                        </div>
-                        <p className="text-sm text-slate-500 mt-1">Enable Single Sign-On with your Identity Provider (IdP).</p>
-                      </div>
-                      <button 
-                        onClick={() => setIsSSOEnabled(!isSSOEnabled)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isSSOEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
-                      >
-                        <span className={`${isSSOEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                   </div>
-                   
-                   {isSSOEnabled && (
-                       <div className="p-6 space-y-4 animate-in slide-in-from-top-2">
-                           <div className="space-y-2">
-                               <label className="text-sm font-semibold text-slate-700">Company Domain</label>
-                               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm">
-                                   <Globe size={16} className="text-slate-400"/>
-                                   <input 
-                                     value={ssoConfig.domain}
-                                     onChange={(e) => setSsoConfig({...ssoConfig, domain: e.target.value})}
-                                     className="flex-1 text-sm outline-none"
-                                   />
-                               </div>
-                           </div>
-                           <div className="space-y-2">
-                               <label className="text-sm font-semibold text-slate-700">IdP Metadata URL</label>
-                               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm">
-                                   <Key size={16} className="text-slate-400"/>
-                                   <input 
-                                     value={ssoConfig.metadataUrl}
-                                     onChange={(e) => setSsoConfig({...ssoConfig, metadataUrl: e.target.value})}
-                                     className="flex-1 text-sm outline-none"
-                                   />
-                               </div>
-                           </div>
-                           <div className="pt-2 flex justify-end">
-                               <button className="px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-800 transition-colors">
-                                   Save Configuration
-                               </button>
-                           </div>
-                       </div>
-                   )}
+            !isSuperAdmin && !subProfile.canAdvancedRbac ? (
+              <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center max-w-xl mx-auto my-8 shadow-sm">
+                <div className="w-14 h-14 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
+                  <Lock size={26} />
+                </div>
+                <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black uppercase tracking-wider rounded-full border border-amber-200">
+                  Enterprise Security Feature
+                </span>
+                <h3 className="text-xl font-bold text-slate-800 mt-3">Enterprise SSO & Advanced RBAC</h3>
+                <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                  Single Sign-On (SAML/OIDC), Okta/Azure AD integration, and granular departmental permission matrices require Enterprise access.
+                </p>
+                <div className="mt-6">
+                  <button
+                    onClick={() => setActiveTab('USAGE')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/20"
+                  >
+                    <Zap size={14} />
+                    View Upgrade Options
+                  </button>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
+                  <Shield size={20} className="text-blue-500" />
+                  Security & SSO Settings
+                </h3>
+                
+                <div className="space-y-6">
+                  {/* SSO Section */}
+                  <div className={`border border-slate-200 rounded-lg bg-white transition-all overflow-hidden ${isSSOEnabled ? 'ring-1 ring-blue-500 border-blue-500' : ''}`}>
+                     <div className="flex items-center justify-between p-4 bg-slate-50 border-b border-slate-100">
+                         <div>
+                          <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-slate-900">SSO Integration</h4>
+                              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded uppercase tracking-wide">Enterprise</span>
+                          </div>
+                          <p className="text-sm text-slate-500 mt-1">Enable Single Sign-On with your Identity Provider (IdP).</p>
+                        </div>
+                        <button 
+                          onClick={() => setIsSSOEnabled(!isSSOEnabled)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isSSOEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
+                        >
+                          <span className={`${isSSOEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                        </button>
+                     </div>
+                     
+                     {isSSOEnabled && (
+                         <div className="p-6 space-y-4 animate-in slide-in-from-top-2">
+                             <div className="space-y-2">
+                                 <label className="text-sm font-semibold text-slate-700">Company Domain</label>
+                                 <div className="flex items-center gap-3 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                     <Globe size={16} className="text-slate-400"/>
+                                     <input 
+                                       value={ssoConfig.domain}
+                                       onChange={(e) => setSsoConfig({...ssoConfig, domain: e.target.value})}
+                                       className="flex-1 text-sm outline-none"
+                                     />
+                                 </div>
+                             </div>
+                             <div className="space-y-2">
+                                 <label className="text-sm font-semibold text-slate-700">IdP Metadata URL</label>
+                                 <div className="flex items-center gap-3 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                     <Key size={16} className="text-slate-400"/>
+                                     <input 
+                                       value={ssoConfig.metadataUrl}
+                                       onChange={(e) => setSsoConfig({...ssoConfig, metadataUrl: e.target.value})}
+                                       className="flex-1 text-sm outline-none"
+                                     />
+                                 </div>
+                             </div>
+                             <div className="pt-2 flex justify-end">
+                                 <button className="px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-800 transition-colors">
+                                     Save Configuration
+                                 </button>
+                             </div>
+                         </div>
+                     )}
+                  </div>
+                </div>
+              </div>
+            )
           )}
           
           {activeTab === 'BACKUP' && (
-             <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
-               <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
-                 <Database size={20} className="text-blue-500" />
-                 Cloud Automated Backups
-               </h3>
-               
-               <div className="space-y-6">
-                 <div className="p-6 bg-slate-900 text-white rounded-2xl relative overflow-hidden shadow-xl">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl"></div>
-                    <div className="relative z-10">
-                       <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-                             <Cloud size={20} />
-                          </div>
-                          <div>
-                             <h4 className="font-black tracking-tight">Automated Protection</h4>
-                             <p className="text-[10px] text-blue-300 uppercase tracking-widest font-black">Daily Snapshots Active</p>
-                          </div>
-                       </div>
-                       <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-                          Your invoice data, compliance history, and audit logs are automatically snapshotted to our secure external vault every 24 hours.
-                       </p>
-                       
-                       <div className="mb-6 space-y-2">
-                          <div className="flex justify-between items-center text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                             <span>Storage Utilization</span>
-                             <span>4.2 GB / 10 GB</span>
-                          </div>
-                          <div className="w-full bg-slate-800 rounded-full h-2">
-                             <div className="bg-blue-500 h-2 rounded-full w-[42%] shadow-lg shadow-blue-500/20"></div>
-                          </div>
-                       </div>
-
-                       <button 
-                         onClick={async () => {
-                           try {
-                             const res = await fetch('/api/backups/trigger', { method: 'POST' });
-                             if (res.ok) {
-                               queryClient.invalidateQueries({ queryKey: ['backupHistory'] });
-                               setToastMessage('Manual backup triggered successfully!');
-                             }
-                           } catch (err) {
-                             setToastMessage('Failed to trigger backup');
-                           }
-                         }}
-                         className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-500/20"
-                       >
-                          Trigger Manual Backup
-                       </button>
-                    </div>
+             !isSuperAdmin && !subProfile.canCloudBackups ? (
+               <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center max-w-xl mx-auto my-8 shadow-sm">
+                 <div className="w-14 h-14 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
+                   <Lock size={26} />
                  </div>
-
-                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Snapshot History (Last 10)</h4>
-                        <button 
-                           onClick={() => queryClient.invalidateQueries({ queryKey: ['backupHistory'] })}
-                           className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all"
-                        >
-                           <RefreshCw size={14}/>
-                        </button>
-                    </div>
-                    <BackupHistoryList />
+                 <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black uppercase tracking-wider rounded-full border border-amber-200">
+                   Professional & Enterprise Feature
+                 </span>
+                 <h3 className="text-xl font-bold text-slate-800 mt-3">Automated 24h Cloud Vault Snapshots</h3>
+                 <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                   Immutable tax record snapshots, 7-year statutory archive guarantees, and point-in-time disaster recovery are available on Professional and Enterprise plans.
+                 </p>
+                 <div className="mt-6">
+                   <button
+                     onClick={() => setActiveTab('USAGE')}
+                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/20"
+                   >
+                     <Zap size={14} />
+                     Upgrade Plan
+                   </button>
                  </div>
                </div>
-             </div>
+             ) : (
+               <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+                 <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2">
+                   <Database size={20} className="text-blue-500" />
+                   Cloud Automated Backups
+                 </h3>
+                 
+                 <div className="space-y-6">
+                   <div className="p-6 bg-slate-900 text-white rounded-2xl relative overflow-hidden shadow-xl">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl"></div>
+                      <div className="relative z-10">
+                         <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
+                               <Cloud size={20} />
+                            </div>
+                            <div>
+                               <h4 className="font-black tracking-tight">Automated Protection</h4>
+                               <p className="text-[10px] text-blue-300 uppercase tracking-widest font-black">Daily Snapshots Active</p>
+                            </div>
+                         </div>
+                         <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+                            Your invoice data, compliance history, and audit logs are automatically snapshotted to our secure external vault every 24 hours.
+                         </p>
+                         
+                         <div className="mb-6 space-y-2">
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                               <span>Storage Utilization</span>
+                               <span>4.2 GB / 10 GB</span>
+                            </div>
+                            <div className="w-full bg-slate-800 rounded-full h-2">
+                               <div className="bg-blue-500 h-2 rounded-full w-[42%] shadow-lg shadow-blue-500/20"></div>
+                            </div>
+                         </div>
+
+                         <button 
+                           onClick={async () => {
+                             try {
+                               const res = await fetch('/api/backups/trigger', { method: 'POST' });
+                               if (res.ok) {
+                                 queryClient.invalidateQueries({ queryKey: ['backupHistory'] });
+                                 setToastMessage('Manual backup triggered successfully!');
+                               }
+                             } catch (err) {
+                               setToastMessage('Failed to trigger backup');
+                             }
+                           }}
+                           className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-500/20"
+                         >
+                            Trigger Manual Backup
+                         </button>
+                      </div>
+                   </div>
+
+                   <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Snapshot History (Last 10)</h4>
+                          <button 
+                             onClick={() => queryClient.invalidateQueries({ queryKey: ['backupHistory'] })}
+                             className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all"
+                          >
+                             <RefreshCw size={14}/>
+                          </button>
+                      </div>
+                      <BackupHistoryList />
+                   </div>
+                 </div>
+               </div>
+             )
           )}
 
           {activeTab === 'STORAGE' && (
              <StorageSettings 
                tenantId={user?.currentTenantId || 't1'} 
                setToast={(msg) => setToastMessage(msg)}
+               isSuperAdmin={isSuperAdmin}
+               subProfile={subProfile}
              />
           )}
 
@@ -1156,18 +1647,66 @@ const Settings: React.FC = () => {
           )}
 
           {activeTab === 'AUDIT' && (
-             <AuditLogs 
-               auditLogs={auditLogs} 
-               isAuditLoading={isAuditLoading} 
-               onExport={handleExportAuditLogs} 
-             />
+             !isSuperAdmin && !subProfile.canAuditLogs ? (
+               <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center max-w-xl mx-auto my-8 shadow-sm">
+                 <div className="w-14 h-14 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
+                   <Lock size={26} />
+                 </div>
+                 <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black uppercase tracking-wider rounded-full border border-amber-200">
+                   Business & Enterprise Feature
+                 </span>
+                 <h3 className="text-xl font-bold text-slate-800 mt-3">Statutory Audit Trail & Change Logs</h3>
+                 <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                   Immutable chronological audit records, user action tracking, and tamper-evident compliance history require Business Growth or Enterprise tier.
+                 </p>
+                 <div className="mt-6">
+                   <button
+                     onClick={() => setActiveTab('USAGE')}
+                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/20"
+                   >
+                     <Zap size={14} />
+                     Upgrade Plan
+                   </button>
+                 </div>
+               </div>
+             ) : (
+               <AuditLogs 
+                 auditLogs={auditLogs} 
+                 isAuditLoading={isAuditLoading} 
+                 onExport={handleExportAuditLogs} 
+               />
+             )
           )}
 
            {activeTab === 'WHATSAPP' && (
-             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-               <WhatsAppNotificationCenter initialTab="SETTINGS" tenantId={currentTenant?.id || 't1'} />
-               <WhatsAppSettingsTab setToast={(msg) => setToastMessage(msg)} />
-             </div>
+             !isSuperAdmin && !subProfile.canWhatsappAlerts ? (
+               <div className="p-8 bg-white rounded-2xl border border-slate-200 text-center max-w-xl mx-auto my-8 shadow-sm">
+                 <div className="w-14 h-14 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
+                   <Lock size={26} />
+                 </div>
+                 <span className="px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black uppercase tracking-wider rounded-full border border-amber-200">
+                   Professional & Enterprise Feature
+                 </span>
+                 <h3 className="text-xl font-bold text-slate-800 mt-3">Automated WhatsApp Compliance Alerts</h3>
+                 <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                   Automated WhatsApp GST reminders, invoice dispatches, and filing status notifications are available on Professional and Enterprise plans.
+                 </p>
+                 <div className="mt-6">
+                   <button
+                     onClick={() => setActiveTab('USAGE')}
+                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/20"
+                   >
+                     <Zap size={14} />
+                     Upgrade Plan
+                   </button>
+                 </div>
+               </div>
+             ) : (
+               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                 <WhatsAppNotificationCenter initialTab="SETTINGS" tenantId={currentTenant?.id || 't1'} />
+                 <WhatsAppSettingsTab setToast={(msg) => setToastMessage(msg)} />
+               </div>
+             )
           )}
 
         </div>

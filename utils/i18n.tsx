@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { safeStorage } from './safeStorage';
 
 export type Language = 'en' | 'hi' | 'gu' | 'mr' | 'ta' | 'te';
 
@@ -251,12 +252,12 @@ const LanguageContext = createContext<LanguageContextType>({
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>(() => {
-    return (localStorage.getItem('preferred_language') as Language) || 'en';
+    return (safeStorage.getItem('preferred_language') as Language) || 'en';
   });
 
   const handleSetLanguage = (lang: Language) => {
     setLanguage(lang);
-    localStorage.setItem('preferred_language', lang);
+    safeStorage.setItem('preferred_language', lang);
   };
 
   const t = (key: string): string => {

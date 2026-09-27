@@ -17,7 +17,7 @@ import {
   Download, UploadCloud, RefreshCw, FileCheck, Shield, ChevronLeft, Eye, Lock,
   CalendarDays, ArrowUpRight, Bell, Laptop, History, GitCompare, GitCommit, GitBranch,
   Edit, Save, RotateCcw, PlusCircle, X, ChevronDown, CheckCircle2, Sparkles, ShieldCheck,
-  MessageSquare
+  MessageSquare, Building2
 } from 'lucide-react';
 import { FilingRecord, ReturnFormType, FilingVersion, FilingDataSummary } from '../types';
 import FilingCalendar from '../components/FilingCalendar';
@@ -29,6 +29,7 @@ import { Gstr1TaxRateChart } from '../components/Gstr1TaxRateChart';
 import { AutomatedGstFilingWizard } from '../components/AutomatedGstFilingWizard';
 import { GstReturnFilingWizard } from '../components/GstReturnFilingWizard';
 import { SendFilingStatusWhatsAppModal } from '../components/SendFilingStatusWhatsAppModal';
+import { BranchManagerModal } from '../components/BranchManagerModal';
 import { 
   requestBrowserNotificationPermission, 
   triggerBrowserNotification, 
@@ -50,6 +51,7 @@ const Filing: React.FC = () => {
   const [selectedReturn, setSelectedReturn] = useState<FilingRecord | null>(null);
   const [isAutomatedWizardOpen, setIsAutomatedWizardOpen] = useState(false);
   const [wizardPeriod, setWizardPeriod] = useState('July 2026');
+  const [isBranchManagerOpen, setIsBranchManagerOpen] = useState(false);
 
   // GSTR-1 / 3B Multi-Step Guided Filing Wizard State
   const [isGstFilingWizardOpen, setIsGstFilingWizardOpen] = useState(false);
@@ -347,6 +349,14 @@ const Filing: React.FC = () => {
                           <PlusCircle size={16} /> Prepare New Return
                       </button>
 
+                      <button 
+                          onClick={() => setIsBranchManagerOpen(true)}
+                          className="px-4 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
+                          title="Allocate & audit GST filings across branches or cost centers"
+                      >
+                          <Building2 size={16} className="text-amber-600" /> Branch Filings
+                      </button>
+
                       <div className="flex bg-slate-100 p-1 rounded-lg">
                           <button 
                               onClick={() => setActiveTab('MONTHLY')} 
@@ -602,6 +612,17 @@ const Filing: React.FC = () => {
                               </div>
 
                               <div className="space-y-3 flex-1">
+                                  {record.branchName && (
+                                      <div className="flex items-center justify-between text-[11px] font-semibold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/80">
+                                          <div className="flex items-center gap-1.5 truncate">
+                                              <Building2 size={12} className="text-amber-600 shrink-0" />
+                                              <span className="truncate">{record.branchName}</span>
+                                          </div>
+                                          {record.costCenter && (
+                                              <span className="font-mono text-[9px] font-bold text-amber-700 ml-1 shrink-0">{record.costCenter}</span>
+                                          )}
+                                      </div>
+                                  )}
                                   <div className="flex justify-between text-sm">
                                       <span className="text-slate-500">Due Date</span>
                                       <span className={`font-medium ${record.status === 'OVERDUE' ? 'text-red-600' : 'text-slate-700'}`}>
@@ -1404,6 +1425,16 @@ const Filing: React.FC = () => {
                 onSuccess={() => {
                     setWhatsAppFilingRecord(null);
                 }}
+            />
+        )}
+
+        {/* Branch Manager & Cost Center Allocation Modal */}
+        {isBranchManagerOpen && (
+            <BranchManagerModal
+                isOpen={isBranchManagerOpen}
+                onClose={() => setIsBranchManagerOpen(false)}
+                tenantId={tenantId}
+                initialTab="FILINGS"
             />
         )}
     </div>

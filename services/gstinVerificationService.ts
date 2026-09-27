@@ -3,6 +3,8 @@
 // Modulus-36 checksum verification, State code mapping, Constitution of Business breakdown,
 // Taxpayer filing history tracking, Search engine, and Bulk GSTIN Validation engine.
 
+import { safeStorage } from '../utils/safeStorage';
+
 export interface StateCodeInfo {
   code: string;
   name: string;
@@ -551,7 +553,7 @@ export const processBulkGstinValidation = (gstinList: string[]): BulkValidationR
 // Local Storage History & Bookmark Helpers
 export const loadSearchHistory = (): string[] => {
   try {
-    const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
+    const raw = safeStorage.getItem(SEARCH_HISTORY_KEY);
     return raw ? JSON.parse(raw) : ['27ABCDE1234F1Z5', '07AAAAA0000A1Z5', '29AAACW9876K1Z2', '33AABCB1234H1Z9'];
   } catch (e) {
     return ['27ABCDE1234F1Z5', '07AAAAA0000A1Z5'];
@@ -562,7 +564,7 @@ export const saveSearchHistory = (gstins: string[]) => {
   try {
     const current = loadSearchHistory();
     const merged = Array.from(new Set([...gstins, ...current])).slice(0, 15);
-    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(merged));
+    safeStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(merged));
   } catch (e) {
     console.error('Failed to save search history:', e);
   }
@@ -570,7 +572,7 @@ export const saveSearchHistory = (gstins: string[]) => {
 
 export const loadBookmarks = (): string[] => {
   try {
-    const raw = localStorage.getItem(BOOKMARKS_KEY);
+    const raw = safeStorage.getItem(BOOKMARKS_KEY);
     return raw ? JSON.parse(raw) : ['27ABCDE1234F1Z5', '07AAAAA0000A1Z5'];
   } catch (e) {
     return ['27ABCDE1234F1Z5'];
@@ -589,7 +591,7 @@ export const toggleBookmark = (gstin: string): boolean => {
       updated = [gstin, ...bookmarks];
       isBookmarked = true;
     }
-    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(updated));
+    safeStorage.setItem(BOOKMARKS_KEY, JSON.stringify(updated));
     return isBookmarked;
   } catch (e) {
     return false;

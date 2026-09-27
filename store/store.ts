@@ -1,6 +1,7 @@
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User, Tenant, GstinRegistrationItem, BranchDetailsItem, UserRole } from '../types';
 import { ENTERPRISE_GROUP_TENANTS, ENTERPRISE_GSTINS_BY_TENANT, ENTERPRISE_BRANCHES_BY_TENANT } from '../src/fixtures/enterpriseTenants';
+import { safeStorage } from '../utils/safeStorage';
 
 interface AuthState {
   user: User | null;
@@ -19,7 +20,7 @@ const defaultEnterpriseUser: User = {
 
 const getInitialAuthState = (): AuthState => {
   try {
-    const savedUser = localStorage.getItem('TF_AUTH_USER');
+    const savedUser = safeStorage.getItem('TF_AUTH_USER');
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
       if (parsed && parsed.id) {
@@ -48,16 +49,12 @@ const authSlice = createSlice({
     login: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
       state.isAuthenticated = true;
-      try {
-        localStorage.setItem('TF_AUTH_USER', JSON.stringify(action.payload));
-      } catch (e) {}
+      safeStorage.setItem('TF_AUTH_USER', JSON.stringify(action.payload));
     },
     logout: (state) => {
       state.user = null;
       state.isAuthenticated = false;
-      try {
-        localStorage.removeItem('TF_AUTH_USER');
-      } catch (e) {}
+      safeStorage.removeItem('TF_AUTH_USER');
     },
     switchRole: (state, action: PayloadAction<UserRole>) => {
       if (state.user) {
@@ -77,10 +74,11 @@ const authSlice = createSlice({
         } else if (action.payload === UserRole.VIEWER) {
           state.user.name = 'Kavita Sen (Executive Viewer)';
           state.user.email = 'viewer@taxflow.com';
+        } else if (action.payload === UserRole.CUSTOMER) {
+          state.user.name = 'Ananya Sen (Client Representative)';
+          state.user.email = 'client@acmeventures.com';
         }
-        try {
-          localStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
-        } catch (e) {}
+        safeStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
       }
     },
     switchUserPersona: (state, action: PayloadAction<{ name: string; email: string; role: UserRole }>) => {
@@ -88,9 +86,7 @@ const authSlice = createSlice({
         state.user.role = action.payload.role;
         state.user.name = action.payload.name;
         state.user.email = action.payload.email;
-        try {
-          localStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
-        } catch (e) {}
+        safeStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
       }
     },
     switchTenant: (state, action: PayloadAction<string>) => {
@@ -99,26 +95,20 @@ const authSlice = createSlice({
         const hasAccess = state.user.availableTenants.some(t => t.id === action.payload);
         if (hasAccess) {
           state.user.currentTenantId = action.payload;
-          try {
-            localStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
-          } catch (e) {}
+          safeStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
         }
       }
     },
     updateProfile: (state, action: PayloadAction<Partial<User>>) => {
       if (state.user) {
         state.user = { ...state.user, ...action.payload };
-        try {
-          localStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
-        } catch (e) {}
+        safeStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
       }
     },
     addTenant: (state, action: PayloadAction<Tenant>) => {
       if (state.user) {
         state.user.availableTenants.push(action.payload);
-        try {
-          localStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
-        } catch (e) {}
+        safeStorage.setItem('TF_AUTH_USER', JSON.stringify(state.user));
       }
     }
   },
@@ -138,10 +128,10 @@ const defaultBranches: Record<string, BranchDetailsItem[]> = ENTERPRISE_BRANCHES
 
 const getInitialOrgState = (): OrgState => {
   try {
-    const savedGstins = localStorage.getItem('TF_ORG_GSTINS');
-    const savedBranches = localStorage.getItem('TF_ORG_BRANCHES');
-    const savedSelectedGstin = localStorage.getItem('TF_SELECTED_GSTIN') || 'ALL';
-    const savedSelectedBranch = localStorage.getItem('TF_SELECTED_BRANCH') || 'ALL';
+    const savedGstins = safeStorage.getItem('TF_ORG_GSTINS');
+    const savedBranches = safeStorage.getItem('TF_ORG_BRANCHES');
+    const savedSelectedGstin = safeStorage.getItem('TF_SELECTED_GSTIN') || 'ALL';
+    const savedSelectedBranch = safeStorage.getItem('TF_SELECTED_BRANCH') || 'ALL';
 
     const parsedGstins = savedGstins ? JSON.parse(savedGstins) : {};
     const parsedBranches = savedBranches ? JSON.parse(savedBranches) : {};
@@ -170,27 +160,19 @@ const orgSlice = createSlice({
   reducers: {
     setSelectedGstin: (state, action: PayloadAction<string>) => {
       state.selectedGstin = action.payload;
-      try {
-        localStorage.setItem('TF_SELECTED_GSTIN', action.payload);
-      } catch (e) {}
+      safeStorage.setItem('TF_SELECTED_GSTIN', action.payload);
     },
     setSelectedBranch: (state, action: PayloadAction<string>) => {
       state.selectedBranchId = action.payload;
-      try {
-        localStorage.setItem('TF_SELECTED_BRANCH', action.payload);
-      } catch (e) {}
+      safeStorage.setItem('TF_SELECTED_BRANCH', action.payload);
     },
     setGstinsForTenant: (state, action: PayloadAction<{ tenantId: string; gstins: GstinRegistrationItem[] }>) => {
       state.gstinsByTenant[action.payload.tenantId] = action.payload.gstins;
-      try {
-        localStorage.setItem('TF_ORG_GSTINS', JSON.stringify(state.gstinsByTenant));
-      } catch (e) {}
+      safeStorage.setItem('TF_ORG_GSTINS', JSON.stringify(state.gstinsByTenant));
     },
     setBranchesForTenant: (state, action: PayloadAction<{ tenantId: string; branches: BranchDetailsItem[] }>) => {
       state.branchesByTenant[action.payload.tenantId] = action.payload.branches;
-      try {
-        localStorage.setItem('TF_ORG_BRANCHES', JSON.stringify(state.branchesByTenant));
-      } catch (e) {}
+      safeStorage.setItem('TF_ORG_BRANCHES', JSON.stringify(state.branchesByTenant));
     },
     addGstinRegistration: (state, action: PayloadAction<{ tenantId: string; gstin: GstinRegistrationItem }>) => {
       const { tenantId, gstin } = action.payload;
@@ -198,9 +180,7 @@ const orgSlice = createSlice({
         state.gstinsByTenant[tenantId] = [];
       }
       state.gstinsByTenant[tenantId].push(gstin);
-      try {
-        localStorage.setItem('TF_ORG_GSTINS', JSON.stringify(state.gstinsByTenant));
-      } catch (e) {}
+      safeStorage.setItem('TF_ORG_GSTINS', JSON.stringify(state.gstinsByTenant));
     },
     addBranch: (state, action: PayloadAction<{ tenantId: string; branch: BranchDetailsItem }>) => {
       const { tenantId, branch } = action.payload;
@@ -208,26 +188,20 @@ const orgSlice = createSlice({
         state.branchesByTenant[tenantId] = [];
       }
       state.branchesByTenant[tenantId].push(branch);
-      try {
-        localStorage.setItem('TF_ORG_BRANCHES', JSON.stringify(state.branchesByTenant));
-      } catch (e) {}
+      safeStorage.setItem('TF_ORG_BRANCHES', JSON.stringify(state.branchesByTenant));
     },
     deleteGstinRegistration: (state, action: PayloadAction<{ tenantId: string; gstinId: string }>) => {
       const { tenantId, gstinId } = action.payload;
       if (state.gstinsByTenant[tenantId]) {
         state.gstinsByTenant[tenantId] = state.gstinsByTenant[tenantId].filter(g => g.id !== gstinId);
-        try {
-          localStorage.setItem('TF_ORG_GSTINS', JSON.stringify(state.gstinsByTenant));
-        } catch (e) {}
+        safeStorage.setItem('TF_ORG_GSTINS', JSON.stringify(state.gstinsByTenant));
       }
     },
     deleteBranch: (state, action: PayloadAction<{ tenantId: string; branchId: string }>) => {
       const { tenantId, branchId } = action.payload;
       if (state.branchesByTenant[tenantId]) {
         state.branchesByTenant[tenantId] = state.branchesByTenant[tenantId].filter(b => b.id !== branchId);
-        try {
-          localStorage.setItem('TF_ORG_BRANCHES', JSON.stringify(state.branchesByTenant));
-        } catch (e) {}
+        safeStorage.setItem('TF_ORG_BRANCHES', JSON.stringify(state.branchesByTenant));
       }
     }
   },
@@ -236,10 +210,8 @@ const orgSlice = createSlice({
       // When switching tenant, reset selectedGstin to ALL so the user sees aggregate or they can pick specific GSTIN
       state.selectedGstin = 'ALL';
       state.selectedBranchId = 'ALL';
-      try {
-        localStorage.setItem('TF_SELECTED_GSTIN', 'ALL');
-        localStorage.setItem('TF_SELECTED_BRANCH', 'ALL');
-      } catch (e) {}
+      safeStorage.setItem('TF_SELECTED_GSTIN', 'ALL');
+      safeStorage.setItem('TF_SELECTED_BRANCH', 'ALL');
     });
   }
 });

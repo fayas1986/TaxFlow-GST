@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { 
   Calendar as CalendarIcon, Bell, Shield, Globe, Loader2, User, Camera, Sparkles, CheckCircle2,
-  Building2, Layers, ArrowRight, ArrowLeft, FileDown, Download
+  Building2, Layers, ArrowRight, ArrowLeft, FileDown, Download, Lock, Crown, Zap, ShieldCheck, TrendingUp
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createInvoice } from '../services/api';
@@ -25,7 +25,6 @@ import VisualAnalyticsDashboard from '../components/dashboard/VisualAnalyticsDas
 import TaxLiabilityMlForecast from '../components/dashboard/TaxLiabilityMlForecast';
 import { TaxLiabilityProjectionCard } from '../components/dashboard/TaxLiabilityProjectionCard';
 import { TaxLiabilityProjectionChart } from '../components/dashboard/TaxLiabilityProjectionChart';
-import PortalLatencyWidget from '../components/dashboard/PortalLatencyWidget';
 import ExecutiveDashboardSuite from '../components/dashboard/ExecutiveDashboardSuite';
 import { GstinEntitySwitcher } from '../components/dashboard/GstinEntitySwitcher';
 import { ComplianceControlTower } from '../components/dashboard/ComplianceControlTower';
@@ -35,14 +34,23 @@ import { ComplianceHeatmap } from '../components/dashboard/ComplianceHeatmap';
 import { MonthlyLiabilityVsPaymentsChart } from '../components/dashboard/MonthlyLiabilityVsPaymentsChart';
 import { MonthlyOutputTaxLiabilityTrendChart } from '../components/dashboard/MonthlyOutputTaxLiabilityTrendChart';
 import { ExecutiveKpiSummary } from '../components/dashboard/ExecutiveKpiSummary';
+import { TaxComplianceAlertSystem } from '../components/dashboard/TaxComplianceAlertSystem';
 import { ProactiveAlertsService } from '../components/dashboard/ProactiveAlertsService';
 import { GstPolicyUpdatesWidget } from '../components/dashboard/GstPolicyUpdatesWidget';
 import { SubsidiaryPerformanceMatrix } from '../components/dashboard/SubsidiaryPerformanceMatrix';
 import { IndividualCompanyHeader } from '../components/dashboard/IndividualCompanyHeader';
 import { ComplianceDeadlinesTimeline } from '../components/dashboard/ComplianceDeadlinesTimeline';
+import { GstrFilingStatusAnalyticsWidget } from '../components/dashboard/GstrFilingStatusAnalyticsWidget';
+import { MonthlyGstLiabilityTrendsBarChart } from '../components/dashboard/MonthlyGstLiabilityTrendsBarChart';
 import { ReconciledVsUnreconciledChart } from '../components/dashboard/ReconciledVsUnreconciledChart';
 import { GstAuditorCard, GstAuditor } from '../components/GstAuditor';
+import CustomerDashboardView from '../components/dashboard/CustomerDashboardView';
 import { ENTERPRISE_GROUP_TENANTS } from '../src/fixtures/enterpriseTenants';
+import { entitlementService } from '../src/core/entitlements/entitlementService';
+import { PlanCode, Feature } from '../src/core/entitlements/types';
+import { subscriptionManager, useSubscriptionAccess, AccessLevel } from '../src/core/billing/SubscriptionManager';
+import PlanGuard, { EnterpriseOnly, BusinessOnly, ProfessionalOnly, AiFeatureGuard, PlanLockBadge, PlanGateButton } from '../components/PlanGuard';
+import { exportGstLiabilityReportToPdf } from '../utils/exportGstLiabilityPdf';
 
 const Dashboard: React.FC = () => {
   const user = useSelector((state: RootState) => state.auth.user);
@@ -52,9 +60,22 @@ const Dashboard: React.FC = () => {
   const branchesByTenant = useSelector((state: RootState) => state.org.branchesByTenant);
 
   const tenantId = user?.currentTenantId || 't1';
-  const availableTenants: Tenant[] = (user?.availableTenants && user.availableTenants.length >= ENTERPRISE_GROUP_TENANTS.length)
+  const subProfile = useSubscriptionAccess(user?.role, tenantId);
+  const tenantSubscription = entitlementService.getSubscription(tenantId);
+  const activePlan = tenantSubscription ? entitlementService.getPlan(tenantSubscription.planId) : null;
+  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+
+  const maxAllowedCompanies = subProfile.maxCompanies;
+  const canUseGroupConsolidation = subProfile.canGroupConsolidation;
+
+  const allAvailableTenants: Tenant[] = (user?.availableTenants && user.availableTenants.length >= ENTERPRISE_GROUP_TENANTS.length)
     ? user.availableTenants
     : ENTERPRISE_GROUP_TENANTS;
+
+  // Filter available entities strictly by subscription plan
+  const availableTenants: Tenant[] = isSuperAdmin 
+    ? allAvailableTenants 
+    : allAvailableTenants.slice(0, Math.max(1, maxAllowedCompanies));
   
   // RBAC: Can see sensitive financial actions
   const canAct = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.ADMIN || user?.role === UserRole.FINANCE_MANAGER || user?.role === UserRole.ACCOUNTANT;
@@ -63,16 +84,62 @@ const Dashboard: React.FC = () => {
   const queryClient = useQueryClient();
 
   // Top-level Dashboard View Mode: 'GROUP_LEVEL' (Consolidated) vs 'INDIVIDUAL_COMPANY'
-  const [dashboardViewMode, setDashboardViewMode] = useState<'GROUP_LEVEL' | 'INDIVIDUAL_COMPANY'>('GROUP_LEVEL');
+  const [dashboardViewMode, setDashboardViewMode] = useState<'GROUP_LEVEL' | 'INDIVIDUAL_COMPANY'>(() => {
+    return canUseGroupConsolidation ? 'GROUP_LEVEL' : 'INDIVIDUAL_COMPANY';
+  });
 
   // Filter State
   const [timeRange, setTimeRange] = useState('MONTHLY');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
-  const [selectedEntityId, setSelectedEntityId] = useState<string>('AGGREGATE');
+  const [selectedEntityId, setSelectedEntityId] = useState<string>(() => canUseGroupConsolidation ? 'AGGREGATE' : tenantId);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [dashboardScanToast, setDashboardScanToast] = useState<string | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [isAuditorModalOpen, setIsAuditorModalOpen] = useState<boolean>(false);
+  const [isExportingLiabilityPdf, setIsExportingLiabilityPdf] = useState<boolean>(false);
+
+  // Export current GST liability visual report directly to PDF using html2canvas & jspdf
+  const handleExportCurrentLiabilityPdf = async () => {
+    try {
+      setIsExportingLiabilityPdf(true);
+      setDashboardScanToast('Generating GST Liability PDF report with html2canvas & jsPDF...');
+
+      const entityTitle = dashboardViewMode === 'GROUP_LEVEL'
+        ? 'Enterprise Organization (Consolidated Group)'
+        : (currentCompany?.name || 'Taxpayer Entity');
+
+      const gstinVal = dashboardViewMode === 'GROUP_LEVEL'
+        ? `${availableTenants.length} Companies Consolidated`
+        : (currentCompany?.gstin || selectedGstin || '27AAAAA0000A1Z5');
+
+      const fileName = await exportGstLiabilityReportToPdf({
+        elementId: 'monthly-gst-liability-trends-bar-chart',
+        reportTitle: 'Statutory GST Liability & Performance Analytics Report',
+        entityName: entityTitle,
+        gstin: gstinVal,
+        period: timeRange === 'QUARTERLY' ? 'Q2 FY 2026-27' : timeRange === 'WEEKLY' ? 'Week 4 Sep 2026' : 'September 2026',
+      });
+
+      setDashboardScanToast(`PDF Export Ready: ${fileName}`);
+      setTimeout(() => setDashboardScanToast(null), 5000);
+    } catch (err: any) {
+      console.error('Failed to export GST liability PDF:', err);
+      setDashboardScanToast('Failed to export GST liability PDF. Please try again.');
+      setTimeout(() => setDashboardScanToast(null), 4000);
+    } finally {
+      setIsExportingLiabilityPdf(false);
+    }
+  };
+
+  // Automatically enforce single company workspace if plan doesn't support group consolidation
+  useEffect(() => {
+    if (!canUseGroupConsolidation && dashboardViewMode === 'GROUP_LEVEL') {
+      setDashboardViewMode('INDIVIDUAL_COMPANY');
+      if (selectedEntityId === 'AGGREGATE') {
+        setSelectedEntityId(tenantId);
+      }
+    }
+  }, [canUseGroupConsolidation, dashboardViewMode, tenantId, selectedEntityId]);
 
   const handleOpenCompanyDashboard = (targetTenantId: string) => {
     setSelectedEntityId(targetTenantId);
@@ -84,6 +151,11 @@ const Dashboard: React.FC = () => {
   };
 
   const handleSwitchToGroupDashboard = () => {
+    if (!canUseGroupConsolidation) {
+      setDashboardScanToast('Group Level Consolidated View is an Enterprise feature. Starter plan includes single operating company workspace.');
+      setTimeout(() => setDashboardScanToast(null), 4000);
+      return;
+    }
     setDashboardViewMode('GROUP_LEVEL');
     setSelectedEntityId('AGGREGATE');
     dispatch(setSelectedGstin('ALL'));
@@ -365,6 +437,21 @@ const Dashboard: React.FC = () => {
     totalGroupSales += s?.sales || 0;
   });
 
+  if (user?.role === UserRole.CUSTOMER) {
+    return (
+      <CustomerDashboardView 
+        tenantId={tenantId} 
+        onNavigate={(path) => { 
+          if (path.startsWith('/')) {
+            window.location.hash = '#' + path;
+          } else {
+            window.location.hash = path;
+          }
+        }} 
+      />
+    );
+  }
+
   return (
     <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Enhanced Executive Welcome Banner */}
@@ -375,7 +462,7 @@ const Dashboard: React.FC = () => {
               {dashboardViewMode === 'GROUP_LEVEL' ? <Layers size={26} /> : (currentCompany.name.charAt(0) || 'U')}
            </div>
            <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
                  <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border ${
                    dashboardViewMode === 'GROUP_LEVEL'
                      ? 'bg-blue-50 text-blue-700 border-blue-200/80'
@@ -383,8 +470,20 @@ const Dashboard: React.FC = () => {
                  }`}>
                     {dashboardViewMode === 'GROUP_LEVEL' ? 'Enterprise Group Portal' : `${currentCompany.name} Workspace`}
                  </span>
-                 <span className="text-slate-500 text-xs font-medium ml-2">
+                 <span className="text-slate-500 text-xs font-medium">
                    {dashboardViewMode === 'GROUP_LEVEL' ? `${availableTenants.length} Subsidiaries Consolidated` : currentCompany.gstin}
+                 </span>
+                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                   <Shield size={10} className="text-blue-600" />
+                   Plan: {subProfile.planName}
+                 </span>
+                 <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border flex items-center gap-1 ${
+                   subProfile.canAdvancedAnalytics 
+                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                     : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                 }`}>
+                   <Sparkles size={10} />
+                   {subProfile.accessLevel.replace(/_/g, ' ')}
                  </span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-2 mb-1.5 leading-tight">
@@ -422,6 +521,27 @@ const Dashboard: React.FC = () => {
                 ))}
              </div>
 
+             {/* Export Current GST Liability Report to PDF (html2canvas & jspdf) */}
+             <button
+               id="dashboard-export-liability-pdf-btn"
+               disabled={isExportingLiabilityPdf}
+               onClick={handleExportCurrentLiabilityPdf}
+               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer whitespace-nowrap disabled:opacity-60"
+               title="Export Current GST Liability Report to PDF using html2canvas and jsPDF"
+             >
+               {isExportingLiabilityPdf ? (
+                 <>
+                   <Loader2 size={15} className="animate-spin text-blue-400" />
+                   <span>Exporting PDF...</span>
+                 </>
+               ) : (
+                 <>
+                   <FileDown size={15} className="text-amber-400" />
+                   <span>Export Liability PDF</span>
+                 </>
+               )}
+             </button>
+
              {/* Download Monthly GSTR Summary Report Button */}
              <button
                id="dashboard-download-report-btn"
@@ -429,66 +549,103 @@ const Dashboard: React.FC = () => {
                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer whitespace-nowrap"
                title="Download Monthly GSTR Summary Report (PDF)"
              >
-               <FileDown size={15} />
-               <span>Download Report</span>
+               <Download size={15} />
+               <span>GSTR Report Suite</span>
              </button>
            </div>
         </div>
       </div>
 
       {/* Primary Dashboard Mode Selector: Group Level vs Individual Company */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200 flex flex-col xl:flex-row xl:items-center justify-between gap-4 shadow-xs overflow-hidden">
-        <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200 w-full xl:w-auto overflow-x-auto shrink-0">
-          <button
-            onClick={handleSwitchToGroupDashboard}
-            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wide whitespace-nowrap transition-all ${
-              dashboardViewMode === 'GROUP_LEVEL'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
-            }`}
-          >
-            <Layers size={16} />
-            <span>Group Level Dashboard (Consolidated)</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 ${
-              dashboardViewMode === 'GROUP_LEVEL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-            }`}>
-              {availableTenants.length} Companies
-            </span>
-          </button>
+      {canUseGroupConsolidation && availableTenants.length > 1 ? (
+        <div className="bg-white rounded-2xl p-3 border border-slate-200 flex flex-col xl:flex-row xl:items-center justify-between gap-4 shadow-xs overflow-hidden">
+          <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200 w-full xl:w-auto overflow-x-auto shrink-0">
+            <button
+              onClick={handleSwitchToGroupDashboard}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wide whitespace-nowrap transition-all ${
+                dashboardViewMode === 'GROUP_LEVEL'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+              }`}
+            >
+              <Layers size={16} />
+              <span>Group Level Dashboard (Consolidated)</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 ${
+                dashboardViewMode === 'GROUP_LEVEL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {availableTenants.length} Companies
+              </span>
+            </button>
 
-          <button
-            onClick={() => {
-              if (dashboardViewMode !== 'INDIVIDUAL_COMPANY') {
-                const targetId = selectedEntityId === 'AGGREGATE' ? (availableTenants[0]?.id || 't1') : selectedEntityId;
-                handleOpenCompanyDashboard(targetId);
-              }
-            }}
-            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wide whitespace-nowrap transition-all ${
-              dashboardViewMode === 'INDIVIDUAL_COMPANY'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
-            }`}
-          >
-            <Building2 size={16} />
-            <span>Individual Company Dashboard</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 ${
-              dashboardViewMode === 'INDIVIDUAL_COMPANY' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-            }`}>
-              {currentCompany?.name || 'Company'}
+            <button
+              onClick={() => {
+                if (dashboardViewMode !== 'INDIVIDUAL_COMPANY') {
+                  const targetId = selectedEntityId === 'AGGREGATE' ? (availableTenants[0]?.id || 't1') : selectedEntityId;
+                  handleOpenCompanyDashboard(targetId);
+                }
+              }}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold tracking-wide whitespace-nowrap transition-all ${
+                dashboardViewMode === 'INDIVIDUAL_COMPANY'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+              }`}
+            >
+              <Building2 size={16} />
+              <span>Individual Company Dashboard</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 ${
+                dashboardViewMode === 'INDIVIDUAL_COMPANY' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {currentCompany?.name || 'Company'}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 px-3 text-xs text-slate-500 truncate">
+            <span className="hidden xl:inline font-medium truncate">
+              {dashboardViewMode === 'GROUP_LEVEL' 
+                ? `Consolidated multi-entity intelligence across ${availableTenants.length} operating subsidiaries`
+                : `Isolated compliance workspace, 2B mismatch alerts, and branch ledgers for ${currentCompany?.name}`}
             </span>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0">
+              <Building2 size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900">{currentCompany?.name} Compliance Center</h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                  {subProfile.planName}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  PAN: {currentCompany?.gstin.substring(2, 12)}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Single operating entity workspace with integrated GSTR-1, GSTR-3B, ledger verification and filing flows.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => { window.location.hash = '#/plan-usage'; }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors shrink-0 cursor-pointer self-start sm:self-auto"
+          >
+            <Sparkles size={13} className="text-indigo-600" />
+            <span>Multi-Entity Upgrade</span>
           </button>
         </div>
+      )}
 
-        <div className="flex items-center gap-3 px-3 text-xs text-slate-500 truncate">
-          <span className="hidden xl:inline font-medium truncate">
-            {dashboardViewMode === 'GROUP_LEVEL' 
-              ? `Consolidated multi-entity intelligence across ${availableTenants.length} operating subsidiaries`
-              : `Isolated compliance workspace, 2B mismatch alerts, and branch ledgers for ${currentCompany?.name}`}
-          </span>
-        </div>
-      </div>
-
-      <ProactiveAlertsService />
+      {/* Real-time Tax Compliance Alert Notification System (monitors GST deadlines based on active Tax Profile) */}
+      <TaxComplianceAlertSystem 
+        tenantId={dashboardViewMode === 'GROUP_LEVEL' ? 't1' : currentCompany.id}
+        companyName={dashboardViewMode === 'GROUP_LEVEL' ? 'Enterprise Group' : currentCompany.name}
+        stateCode={currentCompany.stateCode}
+        isAggregate={dashboardViewMode === 'GROUP_LEVEL'}
+      />
 
       {/* ========================================================================= */}
       {/* 1. DEDICATED GROUP LEVEL DASHBOARD (CONSOLIDATED)                          */}
@@ -498,33 +655,6 @@ const Dashboard: React.FC = () => {
           {/* Real-time GST Policy Updates & Council Digest */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
             <GstPolicyUpdatesWidget />
-          </div>
-
-          {/* Corporate System Integrity Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-3.5 shadow-xs hover:border-slate-300 transition-colors">
-              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shrink-0"></div>
-              <div>
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block">Group Backup Active</span>
-                <span className="text-[10px] text-slate-500 font-medium">Multi-entity snapshot: 2 mins ago</span>
-              </div>
-            </div>
-            <div className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-3.5 shadow-xs hover:border-slate-300 transition-colors">
-              <Shield size={18} className="text-blue-600 shrink-0" />
-              <div>
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block">256-Bit SSL Encrypted</span>
-                <span className="text-[10px] text-slate-500 font-medium">SOC-2 Type II Consolidated Ledger</span>
-              </div>
-            </div>
-            <div className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-3.5 shadow-xs hover:border-slate-300 transition-colors">
-              <Globe size={18} className="text-emerald-600 shrink-0" />
-              <div>
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block">GSTN API Connection</span>
-                <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> Live & Verified ({availableTenants.length} Companies)
-                </span>
-              </div>
-            </div>
           </div>
 
           {/* Group Consolidated Financial Suite (Total Sales, ITC, Net Liability, Dynamic Profit Margin, Monthly Chart, Settlement Mix) */}
@@ -543,6 +673,20 @@ const Dashboard: React.FC = () => {
             />
           </div>
 
+          {/* Dedicated Recharts Bar Chart: Monthly GST Liability Trends & Performance Analytics (Group Consolidated) */}
+          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+            <MonthlyGstLiabilityTrendsBarChart 
+              tenantId="AGGREGATE"
+              selectedGstin="ALL"
+              selectedBranchId="ALL"
+              analyticsData={activeAnalytics}
+              isAggregate={true}
+              entityName="Enterprise Group (Consolidated)"
+              onNavigateToReturns={() => { window.location.hash = '#/filing'; }}
+              onNavigateToComputation={() => { window.location.hash = '#/computation'; }}
+            />
+          </div>
+
           {/* Visual Recharts Compliance Deadlines & Return Filing Milestones Timeline (Consolidated Group Scope) */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
             <ComplianceDeadlinesTimeline 
@@ -558,17 +702,29 @@ const Dashboard: React.FC = () => {
             />
           </div>
 
-          {/* Visual Recharts Reconciled vs Unreconciled Invoices & Potential Tax Gap Exposure */}
+          {/* Recharts Analytics Widget: GSTR Filing Status & Historical Performance (Guarded for Pro & Enterprise) */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <ReconciledVsUnreconciledChart 
-              tenantId={tenantId}
-              selectedGstin="ALL"
-              period="Current Period (Q2 FY 2026-27)"
-              onNavigateToRecon={() => {
-                window.location.hash = '#/reconciliation';
-              }}
+            <GstrFilingStatusAnalyticsWidget 
+              tenantId="AGGREGATE"
+              entityName="Enterprise Group (Consolidated)"
+              isAggregate={true}
+              filings={activeFilings || []}
             />
           </div>
+
+          {/* Visual Recharts Reconciled vs Unreconciled Invoices & Potential Tax Gap Exposure */}
+          <PlanGuard feature={Feature.RECONCILIATION} mode="hide">
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <ReconciledVsUnreconciledChart 
+                tenantId={tenantId}
+                selectedGstin="ALL"
+                period="Current Period (Q2 FY 2026-27)"
+                onNavigateToRecon={() => {
+                  window.location.hash = '#/reconciliation';
+                }}
+              />
+            </div>
+          </PlanGuard>
 
           {/* Automated GST Compliance Auditor Dashboard Card */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
@@ -590,24 +746,28 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Group Tax Liability Machine Learning Forecasting & Outflow Projections */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <TaxLiabilityMlForecast tenantId="t1" analyticsData={activeAnalytics} />
-          </div>
+          <PlanGuard 
+            feature={Feature.AI} 
+            mode="hide" 
+            upgradeTitle="Group ML Tax Liability Forecasting & Risk Engine"
+            upgradeDescription="Unlock predictive cash outflow simulation, generative anomaly diagnosis, and automated ITC optimization by upgrading to Business Growth or Enterprise."
+          >
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <TaxLiabilityMlForecast tenantId="t1" analyticsData={activeAnalytics} />
+            </div>
 
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <TaxLiabilityProjectionCard 
-              tenantId="t1"
-              selectedGstin="ALL"
-              selectedBranchId="ALL"
-              analyticsData={activeAnalytics}
-              onNavigateToForecasting={() => {
-                window.location.hash = '#/tax-forecast';
-              }}
-            />
-          </div>
-
-          {/* Real-Time External GST Portal Connection Monitor */}
-          <PortalLatencyWidget />
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <TaxLiabilityProjectionCard 
+                tenantId="t1"
+                selectedGstin="ALL"
+                selectedBranchId="ALL"
+                analyticsData={activeAnalytics}
+                onNavigateToForecasting={() => {
+                  window.location.hash = '#/tax-forecast';
+                }}
+              />
+            </div>
+          </PlanGuard>
 
           {/* Shared Compliance & Risk Highlights */}
           <div className="pt-4 border-t border-slate-100/60">
@@ -631,15 +791,17 @@ const Dashboard: React.FC = () => {
             totalGroupSales={totalGroupSales}
           />
 
-          {/* Company GSTIN & Branch Performance Switcher */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <GstinEntitySwitcher 
-              availableTenants={[currentCompany]}
-              selectedEntityId={currentCompany.id}
-              onSelectEntity={handleSelectCompany}
-              allTenantStats={statsMap}
-            />
-          </div>
+          {/* Company GSTIN & Branch Performance Switcher (Only shown if multi-entity, multi-GSTIN or multi-branch are allowed) */}
+          {(subProfile.canMultiGstin || subProfile.canMultiBranch || availableTenants.length > 1) && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <GstinEntitySwitcher 
+                availableTenants={[currentCompany]}
+                selectedEntityId={currentCompany.id}
+                onSelectEntity={handleSelectCompany}
+                allTenantStats={statsMap}
+              />
+            </div>
+          )}
 
           {/* Company-Specific Financial Suite */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
@@ -654,6 +816,20 @@ const Dashboard: React.FC = () => {
               allTenantStats={statsMap}
               allTenantAnalytics={analyticsMap}
               hideInternalScopeSwitcher={true}
+            />
+          </div>
+
+          {/* Dedicated Recharts Bar Chart: Monthly GST Liability Trends & Performance Analytics (Individual Company) */}
+          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+            <MonthlyGstLiabilityTrendsBarChart 
+              tenantId={currentCompany.id}
+              selectedGstin={selectedGstin}
+              selectedBranchId={selectedBranchId}
+              analyticsData={activeAnalytics}
+              isAggregate={false}
+              entityName={currentCompany.name}
+              onNavigateToReturns={() => { window.location.hash = '#/filing'; }}
+              onNavigateToComputation={() => { window.location.hash = '#/computation'; }}
             />
           </div>
 
@@ -672,16 +848,18 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Visual Recharts Reconciled vs Unreconciled Invoices & Potential Tax Gap Exposure */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <ReconciledVsUnreconciledChart 
-              tenantId={currentCompany.id}
-              selectedGstin={selectedGstin}
-              period="Current Period (Q2 FY 2026-27)"
-              onNavigateToRecon={() => {
-                window.location.hash = '#/reconciliation';
-              }}
-            />
-          </div>
+          {subProfile.canReconciliation && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <ReconciledVsUnreconciledChart 
+                tenantId={currentCompany.id}
+                selectedGstin={selectedGstin}
+                period="Current Period (Q2 FY 2026-27)"
+                onNavigateToRecon={() => {
+                  window.location.hash = '#/reconciliation';
+                }}
+              />
+            </div>
+          )}
 
           {/* Automated GST Compliance Auditor Dashboard Card for Individual Company */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
@@ -692,61 +870,133 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Automated GSTR-2B Mismatch Detection Alert System for this company */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <Gstr2bMismatchAlerts tenantId={currentCompany.id} />
-          </div>
+          {subProfile.canReconciliation && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <Gstr2bMismatchAlerts tenantId={currentCompany.id} />
+            </div>
+          )}
 
           {/* Compliance Control Tower Console for this company */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <ComplianceControlTower 
-              tenantId={currentCompany.id}
-              stats={activeStats}
-              analytics={activeAnalytics}
-            />
-          </div>
+          {(subProfile.canAdvancedAnalytics || subProfile.planCode !== PlanCode.STARTER) && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <ComplianceControlTower 
+                tenantId={currentCompany.id}
+                stats={activeStats}
+                analytics={activeAnalytics}
+              />
+            </div>
+          )}
 
-          {/* Real-Time Transaction Pipeline Monitor */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <RealTimePipelineVisualizer tenantId={currentCompany.id} />
-          </div>
+          {/* Real-Time Transaction Pipeline Monitor (E-Way / E-Invoice pipeline) */}
+          {(subProfile.canEWayBill || subProfile.canEInvoicing || subProfile.canAdvancedAnalytics) && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <RealTimePipelineVisualizer tenantId={currentCompany.id} />
+            </div>
+          )}
 
-          {/* Compliance Risk & Volumetric Heatmap */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <ComplianceHeatmap />
-          </div>
+          {/* Advanced Analytics vs Basic Statutory Filing Suite */}
+          <PlanGuard 
+            feature={Feature.AI} 
+            minPlan={PlanCode.PROFESSIONAL}
+            mode="hide"
+            upgradeTitle="6-Month Cash Outflow Trends & Heatmap Forensics"
+            upgradeDescription="Upgrade to Business Growth or Enterprise to unlock multi-period cashflow forecasting, automated mismatch resolution, and risk simulations."
+          >
+            {/* Compliance Risk & Volumetric Heatmap */}
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <ComplianceHeatmap />
+            </div>
 
-          {/* Tax Liability Projection Card for this company */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <TaxLiabilityProjectionCard 
-              tenantId={currentCompany.id}
-              selectedGstin={selectedGstin}
-              selectedBranchId={selectedBranchId}
-              analyticsData={activeAnalytics}
-              onNavigateToForecasting={() => {
-                window.location.hash = '#/tax-forecast';
-              }}
-            />
-          </div>
+            {/* Tax Liability Projection Card for this company */}
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <TaxLiabilityProjectionCard 
+                tenantId={currentCompany.id}
+                selectedGstin={selectedGstin}
+                selectedBranchId={selectedBranchId}
+                analyticsData={activeAnalytics}
+                onNavigateToForecasting={() => {
+                  window.location.hash = '#/tax-forecast';
+                }}
+              />
+            </div>
 
-          {/* 6-Month Monthly Output Tax Liability Trends */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <MonthlyOutputTaxLiabilityTrendChart 
-              tenantId={currentCompany.id}
-              selectedGstin={selectedGstin}
-              selectedBranchId={selectedBranchId}
-              analyticsData={activeAnalytics}
-            />
-          </div>
+            {/* 6-Month Monthly Output Tax Liability Trends */}
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <MonthlyOutputTaxLiabilityTrendChart 
+                tenantId={currentCompany.id}
+                selectedGstin={selectedGstin}
+                selectedBranchId={selectedBranchId}
+                analyticsData={activeAnalytics}
+              />
+            </div>
 
-          {/* 6-Month GST Liability Trends vs. Payments Made */}
-          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
-            <MonthlyLiabilityVsPaymentsChart 
-              tenantId={currentCompany.id}
-              selectedGstin={selectedGstin}
-              selectedBranchId={selectedBranchId}
-              analyticsData={activeAnalytics}
-            />
-          </div>
+            {/* 6-Month GST Liability Trends vs. Payments Made */}
+            <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+              <MonthlyLiabilityVsPaymentsChart 
+                tenantId={currentCompany.id}
+                selectedGstin={selectedGstin}
+                selectedBranchId={selectedBranchId}
+                analyticsData={activeAnalytics}
+              />
+            </div>
+          </PlanGuard>
+
+          {/* Always Available Basic Statutory Filing Suite for Starter & Operational Tiers */}
+          {!subProfile.canAdvancedAnalytics && (
+            <div className="space-y-4">
+              <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                      <ShieldCheck size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900">Basic Statutory Filing & Return Preparation</h4>
+                      <p className="text-xs text-slate-500">Standard filing workflows active under {subProfile.planName}</p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Active & Entitled
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  <button
+                    onClick={() => { window.location.hash = '#/computation'; }}
+                    className="p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600">GSTR-1 & 3B Computation</span>
+                      <ArrowRight size={14} className="text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                    <p className="text-[11px] text-slate-500">Calculate tax liability from inward and outward supplies</p>
+                  </button>
+
+                  <button
+                    onClick={() => { window.location.hash = '#/filing'; }}
+                    className="p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600">Direct Portal Filing</span>
+                      <ArrowRight size={14} className="text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                    <p className="text-[11px] text-slate-500">Generate JSON payload and file returns with DSC / EVC</p>
+                  </button>
+
+                  <button
+                    onClick={() => { window.location.hash = '#/invoices'; }}
+                    className="p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600">Sales & Invoices Ledger</span>
+                      <ArrowRight size={14} className="text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                    <p className="text-[11px] text-slate-500">Manage outward invoices and B2B/B2C line items</p>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Visual Recharts Compliance Deadlines & Return Filing Milestones Timeline (Company Scope) */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
@@ -759,6 +1009,16 @@ const Dashboard: React.FC = () => {
               onNavigate={(path) => {
                 window.location.hash = path;
               }}
+            />
+          </div>
+
+          {/* Recharts Analytics Widget: GSTR Filing Status & Historical Performance (Guarded for Pro & Enterprise) */}
+          <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+            <GstrFilingStatusAnalyticsWidget 
+              tenantId={currentCompany.id}
+              entityName={currentCompany.name}
+              isAggregate={false}
+              filings={activeFilings || []}
             />
           </div>
 
@@ -793,9 +1053,6 @@ const Dashboard: React.FC = () => {
 
           {/* Visual Analytics Dashboard */}
           <VisualAnalyticsDashboard stats={activeStats} analytics={activeAnalytics} />
-
-          {/* Real-Time External GST Portal Latency Monitor */}
-          <PortalLatencyWidget />
 
           {/* Compliance & Risk Highlights */}
           <div className="pt-4 border-t border-slate-100/60">

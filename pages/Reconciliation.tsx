@@ -17,17 +17,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import TemplateSelector from '../components/TemplateSelector';
 import { generateStyledDocument } from '../services/documentGenerator';
 import { ExportConfig } from '../types';
-import CollaborationBar from '../components/CollaborationBar';
 import AutoReconcileModal from '../components/AutoReconcileModal';
 import Gstr2bMatchingModal from '../components/Gstr2bMatchingModal';
 import Gstr2aReconciliationModule from '../components/Gstr2aReconciliationModule';
 import Gstr2bVisualSummary from '../components/Gstr2bVisualSummary';
 import Gstr2bReconciliationEngine from '../components/Gstr2bReconciliationEngine';
 import ReconciliationAssistant from '../components/ReconciliationAssistant';
+import BranchReconciliationTool from '../components/BranchReconciliationTool';
 import { Socket } from 'socket.io-client';
 
 interface ReconciliationProps {
-  defaultTab?: 'GSTR2A' | 'PURCHASE' | 'SALES' | 'ASSISTANT';
+  defaultTab?: 'GSTR2A' | 'PURCHASE' | 'SALES' | 'ASSISTANT' | 'BRANCH';
 }
 
 const Reconciliation: React.FC<ReconciliationProps> = ({ defaultTab }) => {
@@ -43,23 +43,27 @@ const Reconciliation: React.FC<ReconciliationProps> = ({ defaultTab }) => {
   const canAction = user?.role !== UserRole.VIEWER;
 
   const urlTab = searchParams.get('tab')?.toLowerCase();
-  const resolvedInitialTab: 'GSTR2A' | 'PURCHASE' | 'SALES' | 'ASSISTANT' = 
-    urlTab === 'assistant' || defaultTab === 'ASSISTANT'
-      ? 'ASSISTANT'
-      : urlTab === 'gstr2a' || defaultTab === 'GSTR2A'
-        ? 'GSTR2A'
-        : urlTab === 'purchase' || defaultTab === 'PURCHASE'
-          ? 'PURCHASE'
-          : urlTab === 'sales' || defaultTab === 'SALES'
-            ? 'SALES'
-            : 'PURCHASE';
+  const resolvedInitialTab: 'GSTR2A' | 'PURCHASE' | 'SALES' | 'ASSISTANT' | 'BRANCH' = 
+    urlTab === 'branch' || urlTab === 'branch_recon' || defaultTab === 'BRANCH'
+      ? 'BRANCH'
+      : urlTab === 'assistant' || defaultTab === 'ASSISTANT'
+        ? 'ASSISTANT'
+        : urlTab === 'gstr2a' || defaultTab === 'GSTR2A'
+          ? 'GSTR2A'
+          : urlTab === 'purchase' || defaultTab === 'PURCHASE'
+            ? 'PURCHASE'
+            : urlTab === 'sales' || defaultTab === 'SALES'
+              ? 'SALES'
+              : 'PURCHASE';
 
-  const [activeTab, setActiveTab] = useState<'GSTR2A' | 'PURCHASE' | 'SALES' | 'ASSISTANT'>(resolvedInitialTab);
+  const [activeTab, setActiveTab] = useState<'GSTR2A' | 'PURCHASE' | 'SALES' | 'ASSISTANT' | 'BRANCH'>(resolvedInitialTab);
 
   // Synchronize active tab whenever URL searchParams or defaultTab prop updates
   useEffect(() => {
     const currentTabParam = searchParams.get('tab')?.toLowerCase();
-    if (currentTabParam === 'assistant' || defaultTab === 'ASSISTANT') {
+    if (currentTabParam === 'branch' || currentTabParam === 'branch_recon' || defaultTab === 'BRANCH') {
+      setActiveTab('BRANCH');
+    } else if (currentTabParam === 'assistant' || defaultTab === 'ASSISTANT') {
       setActiveTab('ASSISTANT');
     } else if (currentTabParam === 'gstr2a' || defaultTab === 'GSTR2A') {
       setActiveTab('GSTR2A');
@@ -311,16 +315,6 @@ const Reconciliation: React.FC<ReconciliationProps> = ({ defaultTab }) => {
         )}
       </AnimatePresence>
 
-      {/* Collaboration Bar */}
-      {user && activeTab !== 'GSTR2A' && (
-        <CollaborationBar 
-          roomId={`recon-${subTab}-${tenantId}`}
-          user={{ id: user.id, name: user.name }}
-          onRemoteUpdate={handleRemoteUpdate}
-          onSocketReady={setSocket}
-        />
-      )}
-
       {/* Header Area */}
       <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div>
@@ -358,17 +352,34 @@ const Reconciliation: React.FC<ReconciliationProps> = ({ defaultTab }) => {
         {/* Tab Switcher */}
         <div className="flex bg-slate-100 p-1.5 rounded-2xl flex-wrap gap-1">
           <button 
+            onClick={() => { setActiveTab('BRANCH'); setSearchParams({ tab: 'branch' }); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'BRANCH' 
+                ? 'bg-blue-600 shadow-xs text-white font-black' 
+                : 'text-slate-600 hover:text-slate-900 bg-blue-50/70'
+            }`}
+          >
+            <Landmark size={14} className={activeTab === 'BRANCH' ? 'text-white' : 'text-blue-600'} />
+            <span>Branch Reconciliation</span>
+            <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+              activeTab === 'BRANCH' ? 'bg-white/20 text-white' : 'bg-blue-200 text-blue-900'
+            }`}>
+              BANK MATCH
+            </span>
+          </button>
+
+          <button 
             onClick={() => { setActiveTab('ASSISTANT'); setSearchParams({ tab: 'assistant' }); }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
               activeTab === 'ASSISTANT' 
-                ? 'bg-blue-600 shadow-xs text-white font-black' 
-                : 'text-slate-600 hover:text-slate-900 bg-blue-50/50'
+                ? 'bg-white shadow-xs text-blue-700 font-black' 
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Sparkles size={14} className={activeTab === 'ASSISTANT' ? 'text-white' : 'text-blue-600'} />
+            <Sparkles size={14} className={activeTab === 'ASSISTANT' ? 'text-blue-600' : 'text-slate-400'} />
             <span>Reconciliation Assistant</span>
             <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
-              activeTab === 'ASSISTANT' ? 'bg-white/20 text-white' : 'bg-blue-200 text-blue-900'
+              activeTab === 'ASSISTANT' ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-700'
             }`}>
               STEP-BY-STEP
             </span>
@@ -413,7 +424,9 @@ const Reconciliation: React.FC<ReconciliationProps> = ({ defaultTab }) => {
       </div>
 
       {/* Main Tab Content */}
-      {activeTab === 'ASSISTANT' ? (
+      {activeTab === 'BRANCH' ? (
+        <BranchReconciliationTool />
+      ) : activeTab === 'ASSISTANT' ? (
         <ReconciliationAssistant tenantName={user?.name || 'TaxFlow Enterprise Ltd'} />
       ) : activeTab === 'GSTR2A' ? (
         <Gstr2aReconciliationModule tenantId={tenantId} />

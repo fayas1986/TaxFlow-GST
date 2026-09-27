@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { TaxComputationSummary, Tenant } from '../types';
+import { safeStorage } from './safeStorage';
 
 export interface MonthlyGstrSummaryReportOptions {
   period: string;
@@ -53,12 +54,12 @@ export const generateMonthlyGstrSummaryPdf = (options: MonthlyGstrSummaryReportO
     format: 'a4',
   });
 
-  // Read saved Theme Preferences from localStorage or options
-  const savedTheme = (options.theme || localStorage.getItem('report_theme') || 'MODERN').toUpperCase();
-  const fontScale = localStorage.getItem('report_font_scale') || 'STANDARD';
-  const showWatermark = localStorage.getItem('report_watermark') !== 'false';
-  const showFooter = localStorage.getItem('report_footer') !== 'false';
-  const customDisclaimer = localStorage.getItem('report_disclaimer') || 
+  // Read saved Theme Preferences from safeStorage or options
+  const savedTheme = (options.theme || safeStorage.getItem('report_theme') || 'MODERN').toUpperCase();
+  const fontScale = safeStorage.getItem('report_font_scale') || 'STANDARD';
+  const showWatermark = safeStorage.getItem('report_watermark') !== 'false';
+  const showFooter = safeStorage.getItem('report_footer') !== 'false';
+  const customDisclaimer = safeStorage.getItem('report_disclaimer') || 
     'This tax document is system-generated and verified against statutory GSTR-1 & GSTR-3B registers.';
 
   // Determine colors and table styles according to theme
@@ -167,9 +168,9 @@ export const generateMonthlyGstrSummaryPdf = (options: MonthlyGstrSummaryReportO
 
   let y = 24;
 
-  // Add Letterhead or Logo if present in localStorage
-  const letterhead = localStorage.getItem('company_letterhead');
-  const logo = localStorage.getItem('company_logo');
+  // Add Letterhead or Logo if present in safeStorage
+  const letterhead = safeStorage.getItem('company_letterhead');
+  const logo = safeStorage.getItem('company_logo');
 
   if (letterhead) {
     try {
