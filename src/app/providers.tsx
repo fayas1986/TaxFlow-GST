@@ -6,10 +6,8 @@
  */
 
 import React from 'react';
-import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
-import { store } from '../../store/store';
 import { LanguageProvider } from '../../utils/i18n';
 import { WorkspaceSyncProvider } from '../../components/WorkspaceSyncContext';
 import { TenantContextProvider } from '../core/tenancy/TenantContext';
@@ -36,18 +34,17 @@ interface AppProvidersProps {
 
 export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
   return (
-    <Provider store={store}>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <LanguageProvider>
-            <TenantContextProvider>
-              <WorkspaceSyncProvider>
-                {children}
-              </WorkspaceSyncProvider>
-            </TenantContextProvider>
-          </LanguageProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </Provider>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <LanguageProvider>
+          <TenantContextProvider>
+            <WorkspaceSyncProvider>
+              {children}
+            </WorkspaceSyncProvider>
+          </TenantContextProvider>
+        </LanguageProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 };
+

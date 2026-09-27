@@ -13,6 +13,7 @@ export interface IRNResponse {
   ackDate?: string;
   qrCodeUrl?: string;
   error?: string;
+  rawResponse?: any;
 }
 
 export interface EWayBillResponse {
@@ -21,6 +22,7 @@ export interface EWayBillResponse {
   ewayBillDate?: string;
   validUpto?: string;
   error?: string;
+  rawResponse?: any;
 }
 
 /**
@@ -37,67 +39,134 @@ export interface GSPProvider {
 }
 
 /**
- * High-performance, simulation-complete Mock GSP Provider
- * Used for development sandboxing, automated tests, and offline simulations.
+ * Canonical E-Invoice DTO Schema (GST IRP v1.04)
+ */
+export interface CanonicalEInvoiceDTO {
+  Version: string;
+  TranDtls: {
+    TaxSch: 'GST';
+    SupTyp: 'B2B' | 'SEZWP' | 'SEZWOP' | 'EXPWP' | 'EXPWOP' | 'DEXP';
+    RegRev?: 'Y' | 'N';
+    EcmGstin?: string;
+    IgstOnIntra?: 'Y' | 'N';
+  };
+  DocDtls: {
+    Typ: 'INV' | 'CRN' | 'DBN';
+    No: string;
+    Dt: string; // DD/MM/YYYY
+  };
+  SellerDtls: {
+    Gstin: string;
+    LglNm: string;
+    TrdNm?: string;
+    Addr1: string;
+    Loc: string;
+    Pin: number;
+    Stcd: string;
+  };
+  BuyerDtls: {
+    Gstin: string;
+    LglNm: string;
+    TrdNm?: string;
+    Pos: string;
+    Addr1: string;
+    Loc: string;
+    Pin: number;
+    Stcd: string;
+  };
+  ItemList: Array<{
+    SlNo: string;
+    PrdDesc: string;
+    IsServc: 'Y' | 'N';
+    HsnCd: string;
+    Qty: number;
+    Unit: string;
+    UnitPrice: number;
+    TotAmt: number;
+    Discount?: number;
+    AssAmt: number;
+    GstRt: number;
+    IgstAmt?: number;
+    CgstAmt?: number;
+    SgstAmt?: number;
+    CesRt?: number;
+    CesAmt?: number;
+    TotItemVal: number;
+  }>;
+  ValDtls: {
+    AssVal: number;
+    CgstVal?: number;
+    SgstVal?: number;
+    IgstVal?: number;
+    CesVal?: number;
+    RndOffAmt?: number;
+    TotInvVal: number;
+  };
+}
+
+/**
+ * Sandboxed Mock GSP Provider for isolated DEV / TEST environments only
  */
 export class MockGSPProvider implements GSPProvider {
-  public name = 'TaxFlow Enterprise Mock GSP';
+  public name = 'TaxFlow Development Sandbox GSP Adapter';
 
   public async authenticate(): Promise<GSPAuthToken> {
     return {
-      token: `gsp_session_${Math.random().toString(36).substring(2, 12)}`,
-      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(), // 6 hours expiry
-      provider: this.name
+      token: `sandbox_token_${Date.now()}`,
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+      provider: this.name,
     };
   }
 
   public async generateIRN(invoice: Invoice): Promise<IRNResponse> {
-    // Basic verification of required GST parameters
-    if (!invoice.gstin) {
-      return { success: false, error: 'GSP Error: Counter-party GSTIN is missing' };
-    }
-    if (!invoice.amount || invoice.amount <= 0) {
-      return { success: false, error: 'GSP Error: Negative or zero taxable value cannot be used for E-Invoicing' };
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('PRODUCTION BLOCKER: MockGSPProvider cannot be invoked in production environment.');
     }
 
-    const hashInput = `${invoice.invoiceNumber}-${invoice.gstin}-${invoice.amount}`;
-    // Simulate high-security SHA-256 IRN hash
-    const fakeIrn = `35054cc24d97033afc${Math.random().toString(16).substring(2, 10)}f49ec4444dbab81f542c555f9d30359dc75794e06bbe`;
-    const randomAck = Math.floor(100000000000 + Math.random() * 900000000000);
+    if (!invoice.gstin) {
+      return { success: false, error: 'Sandbox Error: Counter-party GSTIN is missing' };
+    }
+    if (!invoice.amount || invoice.amount <= 0) {
+      return { success: false, error: 'Sandbox Error: Taxable value must be greater than zero' };
+    }
+
+    const testIrn = `sandbox_irn_${invoice.id}_${Date.now()}`;
+    const testAck = `ack_${Date.now()}`;
 
     return {
       success: true,
-      irn: fakeIrn,
-      ackNo: randomAck.toString(),
+      irn: testIrn,
+      ackNo: testAck,
       ackDate: new Date().toISOString(),
-      qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Invoice:${invoice.invoiceNumber}|IRN:${fakeIrn}`
+      qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=DEV_SANDBOX_IRN:${testIrn}`,
     };
   }
 
   public async cancelIRN(irn: string, reason: string, remarks: string): Promise<boolean> {
     if (!irn) return false;
-    // Mock successful cancellation
     return true;
   }
 
   public async generateEWayBill(invoice: Invoice, transportDetails: any): Promise<EWayBillResponse> {
-    if (!transportDetails.vehicleNo && !transportDetails.transporterId) {
-      return { success: false, error: 'GSP Error: Vehicle Number or Transporter ID required for E-Way Bill generation.' };
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('PRODUCTION BLOCKER: MockGSPProvider cannot be invoked in production environment.');
     }
 
-    const randomEwbNo = Math.floor(100000000000 + Math.random() * 900000000000);
-    const validUpto = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    if (!transportDetails.vehicleNo && !transportDetails.transporterId) {
+      return { success: false, error: 'Sandbox Error: Vehicle Number or Transporter ID required' };
+    }
+
+    const validUpto = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
     return {
       success: true,
-      ewayBillNo: randomEwbNo.toString(),
+      ewayBillNo: `ewb_dev_${Date.now()}`,
       ewayBillDate: new Date().toISOString(),
-      validUpto: `${validUpto} 23:59:59`
+      validUpto,
     };
   }
 
   public async cancelEWayBill(ewayBillNo: string, reasonCode: string, remarks: string): Promise<boolean> {
-    if (!ewayBillNo) return false;
     return true;
   }
 
@@ -106,82 +175,195 @@ export class MockGSPProvider implements GSPProvider {
     if (!validGstinPattern.test(gstin)) {
       return { valid: false };
     }
-
-    // Return dummy company details based on the state code
-    const statePrefix = gstin.substring(0, 2);
-    let stateName = 'Maharashtra';
-    if (statePrefix === '07') stateName = 'Delhi';
-    if (statePrefix === '29') stateName = 'Karnataka';
-
     return {
       valid: true,
-      tradeName: `Enterprise Supplier Pvt Ltd (${stateName})`,
-      status: 'ACTIVE'
+      tradeName: 'Sandbox Verified Partner',
+      status: 'ACTIVE',
     };
   }
 }
 
 /**
  * Enterprise Production GSP Provider Adapter
- * Handles real HTTP request bindings, payload marshalling, authentication handshakes, and error recovery.
- * Fully extensible to ClearTax, Masters India, or direct NIC endpoints.
+ * Connects directly to authenticated GSP / IRP HTTP Endpoints.
+ * Enforces production configuration readiness.
  */
 export class ProductionGSPProvider implements GSPProvider {
-  public name = 'ClearTax GSP Production Integration';
-  private apiUrl = 'https://api.cleartax.in/gst/v2';
+  public name = 'Enterprise Production GSP Adapter';
+  private baseUrl: string;
+  private clientId: string;
   private clientSecret: string;
+  private cachedToken: GSPAuthToken | null = null;
 
-  constructor(clientSecret: string) {
-    this.clientSecret = clientSecret;
+  constructor(config?: { baseUrl?: string; clientId?: string; clientSecret?: string }) {
+    this.baseUrl = config?.baseUrl || process.env.GSP_BASE_URL || '';
+    this.clientId = config?.clientId || process.env.GSP_CLIENT_ID || '';
+    this.clientSecret = config?.clientSecret || process.env.GSP_CLIENT_SECRET || '';
+
+    if (process.env.NODE_ENV === 'production' && (!this.clientId || !this.clientSecret || !this.baseUrl)) {
+      console.warn('[ProductionGSPProvider] Warning: Production GSP credentials (GSP_CLIENT_ID / GSP_CLIENT_SECRET / GSP_BASE_URL) are not set.');
+    }
   }
 
   public async authenticate(): Promise<GSPAuthToken> {
-    // In production, invoke real ClearTax Auth API
-    return {
-      token: `prod_token_ct_${Math.random().toString(36).substring(2, 10)}`,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      provider: this.name
+    if (this.cachedToken && new Date(this.cachedToken.expiresAt) > new Date()) {
+      return this.cachedToken;
+    }
+
+    if (!this.baseUrl || !this.clientId || !this.clientSecret) {
+      throw new Error('500 Internal Server Error [GSP Provider]: GSP credentials missing in production environment.');
+    }
+
+    const response = await fetch(`${this.baseUrl}/v2/user/authenticate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'client-id': this.clientId,
+        'client-secret': this.clientSecret,
+      },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`GSP Authentication Failed (${response.status}): ${errText}`);
+    }
+
+    const data: any = await response.json();
+    this.cachedToken = {
+      token: data.auth_token || data.token,
+      expiresAt: new Date(Date.now() + (data.expires_in || 21600) * 1000).toISOString(),
+      provider: this.name,
     };
+
+    return this.cachedToken;
   }
 
   public async generateIRN(invoice: Invoice): Promise<IRNResponse> {
-    // Real clearTax REST call: POST /v2/einvoice/generate
-    console.log(`[Prod GSP] Making HTTP POST to ${this.apiUrl}/einvoice/generate`);
+    const auth = await this.authenticate();
+
+    const response = await fetch(`${this.baseUrl}/v2/einvoice/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${auth.token}`,
+      },
+      body: JSON.stringify(invoice),
+    });
+
+    const data: any = await response.json();
+
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.message || data.error || `IRP Error (${response.status})`,
+        rawResponse: data,
+      };
+    }
+
     return {
       success: true,
-      irn: `real_irn_hash_${Math.random().toString(36).substring(2, 10)}`,
-      ackNo: `992019${Math.floor(Math.random() * 100000)}`,
-      ackDate: new Date().toISOString(),
-      qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=ProductionMode'
+      irn: data.Irn,
+      ackNo: data.AckNo?.toString(),
+      ackDate: data.AckDt,
+      qrCodeUrl: data.SignedQRCode,
+      rawResponse: data,
     };
   }
 
   public async cancelIRN(irn: string, reason: string, remarks: string): Promise<boolean> {
-    console.log(`[Prod GSP] Cancelling IRN ${irn}`);
-    return true;
+    const auth = await this.authenticate();
+
+    const response = await fetch(`${this.baseUrl}/v2/einvoice/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${auth.token}`,
+      },
+      body: JSON.stringify({ Irn: irn, CnlRsn: reason, CnlRem: remarks }),
+    });
+
+    const data: any = await response.json();
+    return response.ok && data.success;
   }
 
   public async generateEWayBill(invoice: Invoice, transportDetails: any): Promise<EWayBillResponse> {
-    console.log(`[Prod GSP] Generating E-Way Bill for invoice ${invoice.invoiceNumber}`);
+    const auth = await this.authenticate();
+
+    const response = await fetch(`${this.baseUrl}/v2/ewaybill/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${auth.token}`,
+      },
+      body: JSON.stringify({ invoice, transportDetails }),
+    });
+
+    const data: any = await response.json();
+
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.message || data.error || `EWB Error (${response.status})`,
+        rawResponse: data,
+      };
+    }
+
     return {
       success: true,
-      ewayBillNo: `992812${Math.floor(Math.random() * 100000)}`,
-      ewayBillDate: new Date().toISOString(),
-      validUpto: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+      ewayBillNo: data.EwbNo?.toString(),
+      ewayBillDate: data.EwbDt,
+      validUpto: data.EwbValidTill,
+      rawResponse: data,
     };
   }
 
   public async cancelEWayBill(ewayBillNo: string, reasonCode: string, remarks: string): Promise<boolean> {
-    console.log(`[Prod GSP] Cancelling E-Way Bill ${ewayBillNo}`);
-    return true;
+    const auth = await this.authenticate();
+
+    const response = await fetch(`${this.baseUrl}/v2/ewaybill/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${auth.token}`,
+      },
+      body: JSON.stringify({ ewbNo: ewayBillNo, cancelRsnCode: reasonCode, remark: remarks }),
+    });
+
+    return response.ok;
   }
 
   public async verifyGSTIN(gstin: string): Promise<{ valid: boolean; tradeName?: string; status?: string }> {
-    console.log(`[Prod GSP] Verifying GSTIN via external service ${gstin}`);
+    const auth = await this.authenticate();
+
+    const response = await fetch(`${this.baseUrl}/v2/gstin/${gstin}/verify`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${auth.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      return { valid: false };
+    }
+
+    const data: any = await response.json();
     return {
-      valid: true,
-      tradeName: 'Verified External Enterprise Partner',
-      status: 'ACTIVE'
+      valid: data.valid || data.status === 'ACT',
+      tradeName: data.tradeName || data.lgnm,
+      status: data.status || 'ACTIVE',
     };
+  }
+}
+
+/**
+ * Compliance Gateway Provider Router
+ * Resolves appropriate GSP provider instance based on environment & tenant configuration.
+ */
+export class ComplianceGatewayRouter {
+  public static getProvider(): GSPProvider {
+    if (process.env.NODE_ENV === 'production' || process.env.GSP_BASE_URL) {
+      return new ProductionGSPProvider();
+    }
+    return new MockGSPProvider();
   }
 }

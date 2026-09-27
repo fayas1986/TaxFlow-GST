@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState, switchTenant as reduxSwitchTenant } from '../../../store/store';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { Tenant, TenantContext as CoreTenantContext, TenantGstin, TenantBranch, CreateTenantParams } from './types';
 import { tenantService } from './tenantService';
 import { Feature, TenantSubscription, PlanCode, PLANS_CATALOG } from '../entitlements/types';
@@ -42,10 +41,10 @@ export interface TenantContextState {
 const TenantReactContext = createContext<TenantContextState | undefined>(undefined);
 
 export const TenantContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const dispatch = useDispatch();
-  const reduxTenantId = useSelector((state: RootState) => state.auth.user?.currentTenantId);
+  const userTenantId = useAuthStore((state) => state.user?.currentTenantId);
+  const authSwitchTenant = useAuthStore((state) => state.switchTenant);
 
-  const [currentTenantId, setCurrentTenantId] = useState<string>(reduxTenantId || 't1');
+  const [currentTenantId, setCurrentTenantId] = useState<string>(userTenantId || 't1');
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantContext, setTenantContext] = useState<CoreTenantContext | null>(null);
   const [availableTenants, setAvailableTenants] = useState<Tenant[]>([]);
@@ -58,12 +57,12 @@ export const TenantContextProvider: React.FC<{ children: React.ReactNode }> = ({
   const [testResults, setTestResults] = useState<MultiTenantTestSuiteSummary | null>(null);
   const [middlewareTestResults, setMiddlewareTestResults] = useState<MiddlewareTestSuiteSummary | null>(null);
 
-  // Sync state if Redux currentTenantId changes
+  // Sync state if authStore currentTenantId changes
   useEffect(() => {
-    if (reduxTenantId && reduxTenantId !== currentTenantId) {
-      setCurrentTenantId(reduxTenantId);
+    if (userTenantId && userTenantId !== currentTenantId) {
+      setCurrentTenantId(userTenantId);
     }
-  }, [reduxTenantId]);
+  }, [userTenantId]);
 
   const loadTenantData = useCallback((tenantId: string) => {
     setIsLoading(true);
@@ -117,10 +116,8 @@ export const TenantContextProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const switchTenant = useCallback((tenantId: string) => {
     setCurrentTenantId(tenantId);
-    try {
-      dispatch(reduxSwitchTenant(tenantId));
-    } catch (e) {}
-  }, [dispatch]);
+    authSwitchTenant(tenantId);
+  }, [authSwitchTenant]);
 
   const createTenant = useCallback(async (params: CreateTenantParams): Promise<{ tenant: Tenant; subscription: TenantSubscription | null }> => {
     setIsLoading(true);
