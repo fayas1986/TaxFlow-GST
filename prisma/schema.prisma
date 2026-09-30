@@ -1,0 +1,1478 @@
+// ==========================================
+// Generator & Datasource Configurations
+// ==========================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// Enums
+// ==========================================
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+enum PartyType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+enum HsnType {
+  GOODS
+  SERVICES
+}
+
+enum InvoiceCategory {
+  SALES
+  PURCHASE
+}
+
+enum InvoiceType {
+  B2B
+  B2C
+  SEZ_WITH_PAYMENT
+  SEZ_WITHOUT_PAYMENT
+  EXPORT_WITH_PAYMENT
+  EXPORT_WITHOUT_PAYMENT
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  VALIDATED
+  POSTED
+  CANCELLED
+}
+
+enum TaxPeriodStatus {
+  OPEN
+  PROCESSING_REVIEW
+  APPROVED
+  FILED
+  LOCKED
+}
+
+enum LedgerEntryType {
+  OUTPUT_LIABILITY
+  INPUT_TAX_CREDIT
+  LIABILITY_REVERSAL
+  ITC_REVERSAL
+  ADJUSTMENT
+}
+
+enum ItcStatus {
+  IDENTIFIED
+  ELIGIBLE
+  INELIGIBLE
+  PARTIALLY_ELIGIBLE
+  CLAIMED
+  REVERSED
+  RECLAIMED
+  UTILIZED
+}
+
+enum Gstr2bItcAvailability {
+  ELIGIBLE
+  INELIGIBLE
+  BLOCKED
+}
+
+enum ReconciliationMatchStatus {
+  EXACT_MATCH
+  AMOUNT_MISMATCH
+  TAX_HEAD_MISMATCH
+  DATE_MISMATCH
+  MISSING_IN_GSTR2B
+  MISSING_IN_BOOKS
+  SECTION_17_5_BLOCKED
+}
+
+enum ReturnType {
+  GSTR1
+  GSTR3B
+  GSTR9
+}
+
+enum ReturnStatus {
+  DRAFT
+  VALIDATED
+  REVIEW
+  APPROVED
+  SUBMITTED
+  FILED
+  REJECTED
+}
+
+enum FilingStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  RETRYING
+}
+
+enum EInvoiceStatus {
+  NOT_GENERATED
+  VALIDATING
+  SUBMITTING
+  GENERATED
+  CANCEL_PENDING
+  CANCELLED
+  FAILED
+}
+
+enum EWayBillStatus {
+  NOT_GENERATED
+  GENERATED
+  UPDATED_VEHICLE
+  CANCELLED
+  EXPIRED
+  FAILED
+}
+
+enum GspEnvironment {
+  SANDBOX
+  PRODUCTION
+}
+
+enum AuditCategory {
+  AUTHENTICATION
+  INVOICE_MUTATION
+  MASTER_DATA_MUTATION
+  TAX_PERIOD_LOCK
+  LEDGER_POSTING
+  ITC_MUTATION
+  GSTR2B_IMPORT
+  RECONCILIATION_RUN
+  SECURITY_VIOLATION
+  GST_RETURN_MUTATION
+  GST_RETURN_APPROVAL
+  GST_RETURN_FILING
+  E_INVOICE_MUTATION
+  E_WAY_BILL_MUTATION
+  GOV_CREDENTIAL_MUTATION
+  GOV_API_CALL
+}
+
+enum ApprovalStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ApprovalEntityType {
+  SALES_INVOICE
+  PURCHASE_INVOICE
+  GST_RETURN
+  ITC_REVERSAL
+  TAX_LEDGER_REVERSAL
+  E_INVOICE_CANCEL
+}
+
+enum DocumentType {
+  INVOICE_ATTACHMENT
+  PURCHASE_BILL
+  GSTR2B_FILE
+  RETURN_ACKNOWLEDGEMENT
+  E_WAY_BILL_PDF
+  COMPLIANCE_EXPORT
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WEBHOOK
+}
+
+enum NotificationStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  RETRYING
+  DEAD_LETTER
+}
+
+enum IntegrationProvider {
+  GENERIC_REST
+  CSV_EXCEL
+  DYNAMICS_365
+  SAP
+  TALLY
+  ORACLE
+  CUSTOM
+}
+
+enum SyncRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  PARTIAL_SUCCESS
+  FAILED
+}
+
+enum IntegrationErrorCategory {
+  VALIDATION_ERROR
+  MAPPING_ERROR
+  AUTHENTICATION_ERROR
+  CONNECTIVITY_ERROR
+  RATE_LIMIT
+  DUPLICATE
+  DOMAIN_ERROR
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum BackgroundJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  STALLED
+  DEAD_LETTER
+}
+
+enum JobDomain {
+  ERP_SYNC
+  GSTR_FILING
+  GSTR_IMPORT
+  RECONCILIATION
+  GOVERNMENT_API
+  NOTIFICATION
+  BILLING_USAGE
+  DOCUMENT_PROCESSING
+  AI_AUTOMATION
+  STATUTORY_COMPLIANCE
+}
+
+// ==========================================
+// Core Multi-Tenant & Organizational Models
+// ==========================================
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @db.VarChar(255)
+  code      String       @unique @db.VarChar(50)
+  planCode  String       @default("ENTERPRISE") @map("plan_code") @db.VarChar(50)
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  companies          Company[]
+  users              User[]
+  gstRegistrations   GSTRegistration[]
+  branches           Branch[]
+  parties            Party[]
+  partyGstins        PartyGSTIN[]
+  salesInvoices      SalesInvoice[]
+  taxPeriods         TaxPeriod[]
+  taxLedgerEntries   TaxLedgerEntry[]
+  gstr2bImportBatches Gstr2bImportBatch[]
+  gstr2bRecords      Gstr2bRecord[]
+  itcRecords         ItcRecord[]
+  reconciliationRuns ReconciliationRun[]
+  reconciliationMatches ReconciliationMatch[]
+  auditLogs          AuditLog[]
+  gstReturns         GstReturn[]
+  gstReturnVersions  GstReturnVersion[]
+  filingSubmissions  FilingSubmissionLog[]
+  eInvoices          EInvoiceRecord[]
+  eWayBills          EWayBillRecord[]
+  govCredentials     GovGspCredential[]
+  govApiLogs         GovApiAuditLog[]
+  approvalWorkflows   ApprovalWorkflow[]
+  approvalRequests    ApprovalRequest[]
+  approvalDelegations ApprovalDelegation[]
+  immutableAuditLogs  ImmutableAuditLog[]
+  documents           DocumentMetadata[]
+  notifications       NotificationRecord[]
+  erpIntegrations          ErpIntegration[]
+  integrationMappingConfigs IntegrationMappingConfig[]
+  syncRunLogs              SyncRunLog[]
+  importedTransactions     ImportedTransactionRecord[]
+  integrationErrors        IntegrationErrorLog[]
+  subscriptions            Subscription[]
+  usageCounters            UsageCounterRecord[]
+  usageEvents              UsageEventLog[]
+  billingEvents            BillingEvent[]
+  backgroundJobs           BackgroundJobRecord[]
+
+  @@map("tenants")
+}
+
+model Company {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(255)
+  legalName String   @map("legal_name") @db.VarChar(255)
+  pan       String   @db.VarChar(10)
+  email     String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gstRegistrations GSTRegistration[]
+  branches         Branch[]
+  salesInvoices    SalesInvoice[]
+  taxLedgerEntries TaxLedgerEntry[]
+  itcRecords       ItcRecord[]
+  userScopes       UserScope[]
+  gstReturns       GstReturn[]
+  eInvoices        EInvoiceRecord[]
+  eWayBills        EWayBillRecord[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, pan])
+  @@index([tenantId])
+  @@map("companies")
+}
+
+model GSTRegistration {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  companyId        String   @map("company_id") @db.Uuid
+  gstin            String   @db.VarChar(15)
+  legalName        String   @map("legal_name") @db.VarChar(255)
+  tradeName        String?  @map("trade_name") @db.VarChar(255)
+  stateCode        String   @map("state_code") @db.VarChar(2)
+  registrationType String   @default("REGULAR") @map("registration_type") @db.VarChar(50)
+  status           String   @default("ACTIVE") @db.VarChar(20)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company             Company             @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  branches            Branch[]
+  salesInvoices       SalesInvoice[]
+  taxPeriods          TaxPeriod[]
+  taxLedgerEntries    TaxLedgerEntry[]
+  gstr2bImportBatches Gstr2bImportBatch[]
+  gstr2bRecords       Gstr2bRecord[]
+  itcRecords          ItcRecord[]
+  reconciliationRuns  ReconciliationRun[]
+  userScopes          UserScope[]
+  gstReturns          GstReturn[]
+  eInvoices           EInvoiceRecord[]
+  eWayBills           EWayBillRecord[]
+  govCredentials      GovGspCredential[]
+  govApiLogs          GovApiAuditLog[]
+
+  @@unique([id, tenantId])
+  @@unique([id, tenantId, companyId])
+  @@unique([tenantId, gstin])
+  @@index([companyId])
+  @@map("gst_registrations")
+}
+
+model Branch {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  gstinId      String   @map("gstin_id") @db.Uuid
+  branchCode   String   @map("branch_code") @db.VarChar(50)
+  name         String   @db.VarChar(255)
+  stateCode    String   @map("state_code") @db.VarChar(2)
+  isHeadOffice Boolean  @default(false) @map("is_head_office")
+  address      Json?    @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company          Company          @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  gstRegistration  GSTRegistration  @relation(fields: [gstinId, tenantId, companyId], references: [id, tenantId, companyId], onDelete: Cascade)
+  salesInvoices    SalesInvoice[]
+  taxLedgerEntries TaxLedgerEntry[]
+  itcRecords       ItcRecord[]
+  userScopes       UserScope[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, companyId, branchCode])
+  @@index([gstinId])
+  @@map("branches")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  email        String   @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  fullName     String   @map("full_name") @db.VarChar(255)
+  role         String   @default("TAX_ANALYST") @db.VarChar(50)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scopes UserScope[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model UserScope {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  companyId String?  @map("company_id") @db.Uuid
+  gstinId   String?  @map("gstin_id") @db.Uuid
+  branchId  String?  @map("branch_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company         Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  gstRegistration GSTRegistration? @relation(fields: [gstinId], references: [id], onDelete: Cascade)
+  branch          Branch?          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_scopes")
+}
+
+// ==========================================
+// Master Data Models
+// ==========================================
+
+model Party {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  partyCode String    @map("party_code") @db.VarChar(50)
+  legalName String    @map("legal_name") @db.VarChar(255)
+  tradeName String?   @map("trade_name") @db.VarChar(255)
+  partyType PartyType @map("party_type")
+  pan       String?   @db.VarChar(10)
+  email     String?   @db.VarChar(255)
+  phone     String?   @db.VarChar(20)
+  address   Json?     @db.JsonB
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  partyGstins   PartyGSTIN[]
+  salesInvoices SalesInvoice[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, partyCode])
+  @@map("parties")
+}
+
+model PartyGSTIN {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  partyId   String   @map("party_id") @db.Uuid
+  gstin     String   @db.VarChar(15)
+  stateCode String   @map("state_code") @db.VarChar(2)
+  address   Json?    @db.JsonB
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party  Party  @relation(fields: [partyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, partyId, gstin])
+  @@index([partyId])
+  @@map("party_gstins")
+}
+
+model HsnSacMaster {
+  id            String    @id @default(uuid()) @db.Uuid
+  code          String    @unique @db.VarChar(10)
+  description   String    @db.Text
+  type          HsnType   @default(GOODS)
+  igstRate      Decimal   @default(18.00) @map("igst_rate") @db.Decimal(5, 2)
+  cgstRate      Decimal   @default(9.00) @map("cgst_rate") @db.Decimal(5, 2)
+  sgstRate      Decimal   @default(9.00) @map("sgst_rate") @db.Decimal(5, 2)
+  cessRate      Decimal   @default(0.00) @map("cess_rate") @db.Decimal(5, 2)
+  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([code])
+  @@map("hsn_sac_masters")
+}
+
+model TaxRateRule {
+  id            String    @id @default(uuid()) @db.Uuid
+  ruleCode      String    @unique @map("rule_code") @db.VarChar(50)
+  description   String    @db.Text
+  version       String    @default("1.0.0") @db.VarChar(20)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("tax_rate_rules")
+}
+
+// ==========================================
+// Transaction & Invoicing Models
+// ==========================================
+
+model TaxPeriod {
+  id        String          @id @default(uuid()) @db.Uuid
+  tenantId  String          @map("tenant_id") @db.Uuid
+  gstinId   String          @map("gstin_id") @db.Uuid
+  periodKey String          @map("period_key") @db.VarChar(7) // MMYYYY
+  status    TaxPeriodStatus @default(OPEN)
+  isLocked  Boolean         @default(false) @map("is_locked")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gstRegistration     GSTRegistration     @relation(fields: [gstinId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  salesInvoices       SalesInvoice[]
+  taxLedgerEntries    TaxLedgerEntry[]
+  itcRecords          ItcRecord[]
+  gstr2bImportBatches Gstr2bImportBatch[]
+  gstr2bRecords       Gstr2bRecord[]
+  reconciliationRuns  ReconciliationRun[]
+  gstReturns          GstReturn[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, gstinId, periodKey])
+  @@map("tax_periods")
+}
+
+model SalesInvoice {
+  id                     String          @id @default(uuid()) @db.Uuid
+  tenantId               String          @map("tenant_id") @db.Uuid
+  companyId              String          @map("company_id") @db.Uuid
+  gstinId                String          @map("gstin_id") @db.Uuid
+  branchId               String?         @map("branch_id") @db.Uuid
+  partyId                String          @map("party_id") @db.Uuid
+  taxPeriodId            String          @map("tax_period_id") @db.Uuid
+  category               InvoiceCategory @default(SALES)
+  invoiceType            InvoiceType     @default(B2B) @map("invoice_type")
+  status                 InvoiceStatus   @default(DRAFT)
+  invoiceNumber          String          @map("invoice_number") @db.VarChar(100)
+  invoiceDate            DateTime        @map("invoice_date") @db.Date
+  placeOfSupplyStateCode String          @default("27") @map("place_of_supply_state_code") @db.VarChar(2)
+  isReverseCharge        Boolean         @default(false) @map("is_reverse_charge")
+  totalTaxableAmount     Decimal         @default(0.0000) @map("total_taxable_amount") @db.Decimal(16, 4)
+  totalCgstAmount        Decimal         @default(0.0000) @map("total_cgst_amount") @db.Decimal(16, 4)
+  totalSgstAmount        Decimal         @default(0.0000) @map("total_sgst_amount") @db.Decimal(16, 4)
+  totalIgstAmount        Decimal         @default(0.0000) @map("total_igst_amount") @db.Decimal(16, 4)
+  totalCessAmount        Decimal         @default(0.0000) @map("total_cess_amount") @db.Decimal(16, 4)
+  roundOffAmount         Decimal         @default(0.0000) @map("round_off_amount") @db.Decimal(16, 4)
+  totalInvoiceAmount     Decimal         @default(0.0000) @map("total_invoice_amount") @db.Decimal(16, 4)
+  version                Int             @default(1)
+  originalInvoiceId      String?         @map("original_invoice_id") @db.Uuid
+  isEInvoiceGenerated    Boolean         @default(false) @map("is_einvoice_generated")
+  irn                    String?         @db.VarChar(64)
+  isStatutoryLocked      Boolean         @default(false) @map("is_statutory_locked")
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
+
+  tenant                Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company               Company               @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  gstRegistration       GSTRegistration       @relation(fields: [gstinId, tenantId, companyId], references: [id, tenantId, companyId], onDelete: Cascade)
+  branch                Branch?               @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: SetNull)
+  party                 Party                 @relation(fields: [partyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  taxPeriod             TaxPeriod             @relation(fields: [taxPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  lineItems             InvoiceItem[]
+  taxLedgerEntries      TaxLedgerEntry[]
+  itcRecords            ItcRecord[]
+  reconciliationMatches ReconciliationMatch[]
+  eInvoices             EInvoiceRecord[]
+  eWayBills             EWayBillRecord[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, gstinId, invoiceNumber, category])
+  @@index([tenantId, taxPeriodId])
+  @@map("sales_invoices")
+}
+
+model InvoiceItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  invoiceId      String  @map("invoice_id") @db.Uuid
+  itemNumber     Int     @map("item_number")
+  hsnSacCode     String  @map("hsn_sac_code") @db.VarChar(10)
+  description    String  @db.Text
+  quantity       Decimal @default(1.0000) @db.Decimal(16, 4)
+  unitPrice      Decimal @map("unit_price") @db.Decimal(16, 4)
+  discountAmount Decimal @default(0.0000) @map("discount_amount") @db.Decimal(16, 4)
+  taxableValue   Decimal @map("taxable_value") @db.Decimal(16, 4)
+  cgstRate       Decimal @default(0.00) @map("cgst_rate") @db.Decimal(5, 2)
+  cgstAmount     Decimal @default(0.0000) @map("cgst_amount") @db.Decimal(16, 4)
+  sgstRate       Decimal @default(0.00) @map("sgst_rate") @db.Decimal(5, 2)
+  sgstAmount     Decimal @default(0.0000) @map("sgst_amount") @db.Decimal(16, 4)
+  igstRate       Decimal @default(0.00) @map("igst_rate") @db.Decimal(5, 2)
+  igstAmount     Decimal @default(0.0000) @map("igst_amount") @db.Decimal(16, 4)
+  cessRate       Decimal @default(0.00) @map("cess_rate") @db.Decimal(5, 2)
+  cessAmount     Decimal @default(0.0000) @map("cess_amount") @db.Decimal(16, 4)
+  totalAmount    Decimal @map("total_amount") @db.Decimal(16, 4)
+
+  salesInvoice SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+// ==========================================
+// GSTR-2B & ITC Lifecycle Models
+// ==========================================
+
+model Gstr2bImportBatch {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  gstinId        String   @map("gstin_id") @db.Uuid
+  taxPeriodId    String   @map("tax_period_id") @db.Uuid
+  periodKey      String   @map("period_key") @db.VarChar(7)
+  sourceFilename String   @map("source_filename") @db.VarChar(255)
+  recordCount    Int      @default(0) @map("record_count")
+  importStatus   String   @default("COMPLETED") @map("import_status") @db.VarChar(50)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gstRegistration GSTRegistration   @relation(fields: [gstinId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  taxPeriod       TaxPeriod         @relation(fields: [taxPeriodId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  records         Gstr2bRecord[]
+  reconciliationRuns ReconciliationRun[]
+
+  @@index([tenantId, gstinId, periodKey])
+  @@map("gstr2b_import_batches")
+}
+
+model Gstr2bRecord {
+  id              String                 @id @default(uuid()) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
+  gstinId         String                 @map("gstin_id") @db.Uuid
+  batchId         String                 @map("batch_id") @db.Uuid
+  taxPeriodId     String                 @map("tax_period_id") @db.Uuid
+  periodKey       String                 @map("period_key") @db.VarChar(7)
+  supplierGstin   String                 @map("supplier_gstin") @db.VarChar(15)
+  supplierName    String                 @map("supplier_name") @db.VarChar(255)
+  invoiceNumber   String                 @map("invoice_number") @db.VarChar(100)
+  invoiceDate     DateTime               @map("invoice_date") @db.Date
+  invoiceType     String                 @default("B2B") @map("invoice_type") @db.VarChar(50)
+  taxableValue    Decimal                @default(0.0000) @map("taxable_value") @db.Decimal(16, 4)
+  cgstAmount      Decimal                @default(0.0000) @map("cgst_amount") @db.Decimal(16, 4)
+  sgstAmount      Decimal                @default(0.0000) @map("sgst_amount") @db.Decimal(16, 4)
+  igstAmount      Decimal                @default(0.0000) @map("igst_amount") @db.Decimal(16, 4)
+  cessAmount      Decimal                @default(0.0000) @map("cess_amount") @db.Decimal(16, 4)
+  totalTaxAmount  Decimal                @default(0.0000) @map("total_tax_amount") @db.Decimal(16, 4)
+  totalInvoiceAmount Decimal             @default(0.0000) @map("total_invoice_amount") @db.Decimal(16, 4)
+  itcAvailability Gstr2bItcAvailability  @default(ELIGIBLE) @map("itc_availability")
+  rawPayload      Json?                  @db.JsonB
+  createdAt       DateTime               @default(now()) @map("created_at")
+
+  tenant                Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gstRegistration       GSTRegistration       @relation(fields: [gstinId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  batch                 Gstr2bImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  taxPeriod             TaxPeriod             @relation(fields: [taxPeriodId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  itcRecords            ItcRecord[]
+  reconciliationMatches ReconciliationMatch[]
+
+  @@unique([tenantId, gstinId, periodKey, supplierGstin, invoiceNumber])
+  @@index([tenantId, gstinId])
+  @@map("gstr2b_records")
+}
+
+model ItcRecord {
+  id                     String    @id @default(uuid()) @db.Uuid
+  tenantId               String    @map("tenant_id") @db.Uuid
+  companyId              String    @map("company_id") @db.Uuid
+  gstinId                String    @map("gstin_id") @db.Uuid
+  branchId               String?   @map("branch_id") @db.Uuid
+  purchaseInvoiceId      String?   @map("purchase_invoice_id") @db.Uuid
+  gstr2bRecordId         String?   @map("gstr2b_record_id") @db.Uuid
+  taxPeriodId            String    @map("tax_period_id") @db.Uuid
+  status                 ItcStatus @default(IDENTIFIED)
+  section17BlockedReason String?   @map("section_17_blocked_reason") @db.VarChar(255)
+  statutoryClause        String?   @map("statutory_clause") @db.VarChar(255)
+  eligibleTaxable        Decimal   @default(0.0000) @map("eligible_taxable") @db.Decimal(16, 4)
+  eligibleCgst           Decimal   @default(0.0000) @map("eligible_cgst") @db.Decimal(16, 4)
+  eligibleSgst           Decimal   @default(0.0000) @map("eligible_sgst") @db.Decimal(16, 4)
+  eligibleIgst           Decimal   @default(0.0000) @map("eligible_igst") @db.Decimal(16, 4)
+  eligibleCess           Decimal   @default(0.0000) @map("eligible_cess") @db.Decimal(16, 4)
+  eligibleTotalTax       Decimal   @default(0.0000) @map("eligible_total_tax") @db.Decimal(16, 4)
+  blockedTaxAmount       Decimal   @default(0.0000) @map("blocked_tax_amount") @db.Decimal(16, 4)
+  claimedTaxAmount       Decimal   @default(0.0000) @map("claimed_tax_amount") @db.Decimal(16, 4)
+  reversedTaxAmount      Decimal   @default(0.0000) @map("reversed_tax_amount") @db.Decimal(16, 4)
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company         Company         @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  gstRegistration GSTRegistration @relation(fields: [gstinId, tenantId, companyId], references: [id, tenantId, companyId], onDelete: Cascade)
+  branch          Branch?         @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: SetNull)
+  purchaseInvoice SalesInvoice?   @relation(fields: [purchaseInvoiceId, tenantId], references: [id, tenantId], onDelete: SetNull)
+  gstr2bRecord    Gstr2bRecord?   @relation(fields: [gstr2bRecordId], references: [id], onDelete: SetNull)
+  taxPeriod       TaxPeriod       @relation(fields: [taxPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([tenantId, taxPeriodId])
+  @@map("itc_records")
+}
+
+model ReconciliationRun {
+  id                   String    @id @default(uuid()) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  gstinId              String    @map("gstin_id") @db.Uuid
+  taxPeriodId          String    @map("tax_period_id") @db.Uuid
+  batchId              String?   @map("batch_id") @db.Uuid
+  runStatus            String    @default("COMPLETED") @map("run_status") @db.VarChar(50)
+  matchingRuleVersion  String    @default("1.0.0") @map("matching_rule_version") @db.VarChar(20)
+  dateToleranceDays    Int       @default(7) @map("date_tolerance_days")
+  taxToleranceAmount   Decimal   @default(10.0000) @map("tax_tolerance_amount") @db.Decimal(16, 4)
+  totalProcessed       Int       @default(0) @map("total_processed")
+  exactMatchCount      Int       @default(0) @map("exact_match_count")
+  partialMatchCount    Int       @default(0) @map("partial_match_count")
+  mismatchCount        Int       @default(0) @map("mismatch_count")
+  missingInPortalCount Int       @default(0) @map("missing_in_portal_count")
+  missingInBooksCount  Int       @default(0) @map("missing_in_books_count")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gstRegistration GSTRegistration    @relation(fields: [gstinId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  taxPeriod       TaxPeriod          @relation(fields: [taxPeriodId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  batch           Gstr2bImportBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  matches         ReconciliationMatch[]
+
+  @@index([tenantId, gstinId, taxPeriodId])
+  @@map("reconciliation_runs")
+}
+
+model ReconciliationMatch {
+  id                String                    @id @default(uuid()) @db.Uuid
+  tenantId          String                    @map("tenant_id") @db.Uuid
+  runId             String                    @map("run_id") @db.Uuid
+  purchaseInvoiceId String?                   @map("purchase_invoice_id") @db.Uuid
+  gstr2bRecordId    String?                   @map("gstr2b_record_id") @db.Uuid
+  matchStatus       ReconciliationMatchStatus @map("match_status")
+  matchScore        Decimal                   @default(100.00) @map("match_score") @db.Decimal(5, 2)
+  varianceAmount    Decimal                   @default(0.0000) @map("variance_amount") @db.Decimal(16, 4)
+  matchExplanation  String                    @map("match_explanation") @db.Text
+  createdAt         DateTime                  @default(now()) @map("created_at")
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  run             ReconciliationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  purchaseInvoice SalesInvoice?     @relation(fields: [purchaseInvoiceId, tenantId], references: [id, tenantId], onDelete: SetNull)
+  gstr2bRecord    Gstr2bRecord?     @relation(fields: [gstr2bRecordId], references: [id], onDelete: SetNull)
+
+  @@index([runId])
+  @@map("reconciliation_matches")
+}
+
+// ==========================================
+// Append-Only Financial Tax Ledger
+// ==========================================
+
+model TaxLedgerEntry {
+  id              String          @id @default(uuid()) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  companyId       String          @map("company_id") @db.Uuid
+  gstinId         String          @map("gstin_id") @db.Uuid
+  branchId        String?         @map("branch_id") @db.Uuid
+  invoiceId       String?         @map("invoice_id") @db.Uuid
+  taxPeriodId     String          @map("tax_period_id") @db.Uuid
+  entryType       LedgerEntryType @map("entry_type")
+  taxableValue    Decimal         @default(0.0000) @map("taxable_value") @db.Decimal(16, 4)
+  cgstAmount      Decimal         @default(0.0000) @map("cgst_amount") @db.Decimal(16, 4)
+  sgstAmount      Decimal         @default(0.0000) @map("sgst_amount") @db.Decimal(16, 4)
+  igstAmount      Decimal         @default(0.0000) @map("igst_amount") @db.Decimal(16, 4)
+  cessAmount      Decimal         @default(0.0000) @map("cess_amount") @db.Decimal(16, 4)
+  totalTaxAmount  Decimal         @default(0.0000) @map("total_tax_amount") @db.Decimal(16, 4)
+  referenceNumber String          @map("reference_number") @db.VarChar(100)
+  description     String          @db.Text
+  isReversed      Boolean         @default(false) @map("is_reversed")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company         Company         @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  gstRegistration GSTRegistration @relation(fields: [gstinId, tenantId, companyId], references: [id, tenantId, companyId], onDelete: Cascade)
+  branch          Branch?         @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: SetNull)
+  invoice         SalesInvoice?   @relation(fields: [invoiceId, tenantId], references: [id, tenantId], onDelete: SetNull)
+  taxPeriod       TaxPeriod       @relation(fields: [taxPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([tenantId, taxPeriodId])
+  @@index([tenantId, gstinId])
+  @@map("tax_ledger_entries")
+}
+
+// ==========================================
+// Audit & Security Logging
+// ==========================================
+
+model AuditLog {
+  id         String        @id @default(uuid()) @db.Uuid
+  tenantId   String        @map("tenant_id") @db.Uuid
+  userId     String?       @map("user_id") @db.Uuid
+  category   AuditCategory
+  action     String        @db.VarChar(100)
+  entityName String        @map("entity_name") @db.VarChar(100)
+  entityId   String?       @map("entity_id") @db.VarChar(100)
+  diff       Json?         @db.JsonB
+  ipAddress  String?       @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+// ==========================================
+// GST Returns & Government Filing Models
+// ==========================================
+
+model GstReturn {
+  id               String       @id @default(uuid()) @db.Uuid
+  tenantId         String       @map("tenant_id") @db.Uuid
+  companyId        String       @map("company_id") @db.Uuid
+  gstinId          String       @map("gstin_id") @db.Uuid
+  taxPeriodId      String       @map("tax_period_id") @db.Uuid
+  periodKey        String       @map("period_key") @db.VarChar(7) // MMYYYY
+  returnType       ReturnType   @map("return_type")
+  status           ReturnStatus @default(DRAFT)
+  currentVersion   Int          @default(1) @map("current_version")
+  preparedByUserId String?      @map("prepared_by_user_id") @db.Uuid
+  approvedByUserId String?      @map("approved_by_user_id") @db.Uuid
+  approvedAt       DateTime?    @map("approved_at")
+  submittedAt      DateTime?    @map("submitted_at")
+  filedAt          DateTime?    @map("filed_at")
+  arn              String?      @db.VarChar(100)
+  ackNumber        String?      @map("ack_number") @db.VarChar(100)
+  ackDate          DateTime?    @map("ack_date")
+  isLocked         Boolean      @default(false) @map("is_locked")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company           Company               @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  gstRegistration   GSTRegistration       @relation(fields: [gstinId, tenantId, companyId], references: [id, tenantId, companyId], onDelete: Cascade)
+  taxPeriod         TaxPeriod             @relation(fields: [taxPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  versions          GstReturnVersion[]
+  filingSubmissions FilingSubmissionLog[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, gstinId, taxPeriodId, returnType])
+  @@index([tenantId, gstinId, periodKey])
+  @@map("gst_returns")
+}
+
+model GstReturnVersion {
+  id                    String       @id @default(uuid()) @db.Uuid
+  returnId              String       @map("return_id") @db.Uuid
+  tenantId              String       @map("tenant_id") @db.Uuid
+  versionNumber         Int          @map("version_number")
+  status                ReturnStatus @map("status")
+  summaryPayload        Json         @map("summary_payload") @db.JsonB
+  validationResult      Json?        @map("validation_result") @db.JsonB
+  reconciliationSummary Json?        @map("reconciliation_summary") @db.JsonB
+  createdById           String?      @map("created_by_id") @db.Uuid
+  createdAt             DateTime     @default(now()) @map("created_at")
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  return GstReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@unique([returnId, versionNumber])
+  @@index([tenantId, returnId])
+  @@map("gst_return_versions")
+}
+
+model FilingSubmissionLog {
+  id                String       @id @default(uuid()) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  returnId          String       @map("return_id") @db.Uuid
+  versionNumber     Int          @map("version_number")
+  idempotencyKey    String       @map("idempotency_key") @db.VarChar(255)
+  gspProvider       String       @default("TAXFLOW_GSP_ADAPTER") @map("gsp_provider") @db.VarChar(100)
+  requestPayload    Json         @map("request_payload") @db.JsonB
+  responsePayload   Json?        @map("response_payload") @db.JsonB
+  status            FilingStatus @default(PENDING)
+  arn               String?      @db.VarChar(100)
+  errorCode         String?      @map("error_code") @db.VarChar(50)
+  errorMessage      String?      @map("error_message") @db.Text
+  submittedByUserId String?      @map("submitted_by_user_id") @db.Uuid
+  submittedAt       DateTime     @default(now()) @map("submitted_at")
+  responseTimestamp DateTime?    @map("response_timestamp")
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  return GstReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([returnId])
+  @@map("filing_submission_logs")
+}
+
+// ==========================================
+// E-Invoice, E-Way Bill & Integration Models
+// ==========================================
+
+model EInvoiceRecord {
+  id               String         @id @default(uuid()) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  companyId        String         @map("company_id") @db.Uuid
+  gstinId          String         @map("gstin_id") @db.Uuid
+  invoiceId        String         @map("invoice_id") @db.Uuid
+  status           EInvoiceStatus @default(NOT_GENERATED)
+  irn              String?        @db.VarChar(64)
+  ackNumber        String?        @map("ack_number") @db.VarChar(100)
+  ackDate          DateTime?      @map("ack_date")
+  signedInvoice    String?        @map("signed_invoice") @db.Text
+  signedQrCode     String?        @map("signed_qr_code") @db.Text
+  cancelReason     String?        @map("cancel_reason") @db.VarChar(50)
+  cancelRemark     String?        @map("cancel_remark") @db.Text
+  cancelDate       DateTime?      @map("cancel_date")
+  provider         String         @default("TAXFLOW_SANDBOX_GSP") @db.VarChar(100)
+  environment      GspEnvironment @default(SANDBOX)
+  errorCode        String?        @map("error_code") @db.VarChar(50)
+  errorMessage     String?        @map("error_message") @db.Text
+  rawResponse      Json?          @map("raw_response") @db.JsonB
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company         Company         @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  gstRegistration GSTRegistration @relation(fields: [gstinId, tenantId, companyId], references: [id, tenantId, companyId], onDelete: Cascade)
+  salesInvoice    SalesInvoice    @relation(fields: [invoiceId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  eWayBills       EWayBillRecord[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, invoiceId])
+  @@index([tenantId, irn])
+  @@map("einvoice_records")
+}
+
+model EWayBillRecord {
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @map("tenant_id") @db.Uuid
+  companyId       String         @map("company_id") @db.Uuid
+  gstinId         String         @map("gstin_id") @db.Uuid
+  invoiceId       String         @map("invoice_id") @db.Uuid
+  eInvoiceId      String?        @map("einvoice_id") @db.Uuid
+  status          EWayBillStatus @default(NOT_GENERATED)
+  eWayBillNumber  String?        @map("eway_bill_number") @db.VarChar(12)
+  eWayBillDate    DateTime?      @map("eway_bill_date")
+  validUntil      DateTime?      @map("valid_until")
+  transporterId   String?        @map("transporter_id") @db.VarChar(15)
+  transporterName String?        @map("transporter_name") @db.VarChar(255)
+  transportMode   String?        @map("transport_mode") @db.VarChar(20)
+  distanceKm      Int?           @map("distance_km")
+  vehicleNumber   String?        @map("vehicle_number") @db.VarChar(50)
+  vehicleType     String?        @default("R") @map("vehicle_type") @db.VarChar(10)
+  cancelReason    String?        @map("cancel_reason") @db.VarChar(50)
+  cancelRemark    String?        @map("cancel_remark") @db.Text
+  cancelDate      DateTime?      @map("cancel_date")
+  provider        String         @default("TAXFLOW_SANDBOX_GSP") @db.VarChar(100)
+  environment     GspEnvironment @default(SANDBOX)
+  rawResponse     Json?          @map("raw_response") @db.JsonB
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company         Company         @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  gstRegistration GSTRegistration @relation(fields: [gstinId, tenantId, companyId], references: [id, tenantId, companyId], onDelete: Cascade)
+  salesInvoice    SalesInvoice    @relation(fields: [invoiceId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  eInvoice        EInvoiceRecord? @relation(fields: [eInvoiceId], references: [id], onDelete: SetNull)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, eWayBillNumber])
+  @@map("ewaybill_records")
+}
+
+model GovGspCredential {
+  id                  String         @id @default(uuid()) @db.Uuid
+  tenantId            String         @map("tenant_id") @db.Uuid
+  gstinId             String         @map("gstin_id") @db.Uuid
+  provider            String         @db.VarChar(100)
+  environment         GspEnvironment @default(SANDBOX)
+  encryptedUsername   String         @map("encrypted_username") @db.Text
+  encryptedPassword   String         @map("encrypted_password") @db.Text
+  encryptedClientId   String         @map("encrypted_client_id") @db.Text
+  encryptedClientSecret String       @map("encrypted_client_secret") @db.Text
+  authMethod          String         @default("AES-256-GCM") @map("auth_method") @db.VarChar(50)
+  expiresAt           DateTime?      @map("expires_at")
+  isActive            Boolean        @default(true) @map("is_active")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gstRegistration GSTRegistration @relation(fields: [gstinId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, gstinId, provider, environment])
+  @@map("gov_gsp_credentials")
+}
+
+model GovApiAuditLog {
+  id                  String         @id @default(uuid()) @db.Uuid
+  tenantId            String         @map("tenant_id") @db.Uuid
+  gstinId             String         @map("gstin_id") @db.Uuid
+  documentReference   String?        @map("document_reference") @db.VarChar(100)
+  provider            String         @db.VarChar(100)
+  environment         GspEnvironment @default(SANDBOX)
+  action              String         @db.VarChar(100)
+  requestTimestamp    DateTime       @default(now()) @map("request_timestamp")
+  responseTimestamp   DateTime?      @map("response_timestamp")
+  correlationId       String         @map("correlation_id") @db.VarChar(100)
+  httpStatus          Int?           @map("http_status")
+  isSuccess           Boolean        @default(false) @map("is_success")
+  governmentReference String?        @map("government_reference") @db.VarChar(100)
+  errorCode           String?        @map("error_code") @db.VarChar(50)
+  errorMessage        String?        @map("error_message") @db.Text
+  retryCount          Int            @default(0) @map("retry_count")
+  redactedRequest     Json?          @map("redacted_request") @db.JsonB
+  redactedResponse    Json?          @map("redacted_response") @db.JsonB
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gstRegistration GSTRegistration @relation(fields: [gstinId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, requestTimestamp])
+  @@index([correlationId])
+  @@map("gov_api_audit_logs")
+}
+
+// ==========================================
+// Stage 8: Approvals, Audit, Documents & Operational Controls
+// ==========================================
+
+model ApprovalWorkflow {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @map("tenant_id") @db.Uuid
+  entityType ApprovalEntityType @map("entity_type")
+  name       String             @db.VarChar(255)
+  minAmount  Decimal?           @map("min_amount") @db.Decimal(16, 4)
+  maxAmount  Decimal?           @map("max_amount") @db.Decimal(16, 4)
+  isActive   Boolean            @default(true) @map("is_active")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  tenant Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stages ApprovalStageDefinition[]
+
+  @@unique([tenantId, entityType, name])
+  @@index([tenantId])
+  @@map("approval_workflows")
+}
+
+model ApprovalStageDefinition {
+  id             String   @id @default(uuid()) @db.Uuid
+  workflowId     String   @map("workflow_id") @db.Uuid
+  stageIndex     Int      @map("stage_index")
+  stageName      String   @map("stage_name") @db.VarChar(100)
+  requiredRole   String?  @map("required_role") @db.VarChar(50)
+  requiredUserId String?  @map("required_user_id") @db.Uuid
+  minApprovers   Int      @default(1) @map("min_approvers")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  workflow ApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, stageIndex])
+  @@map("approval_stage_definitions")
+}
+
+model ApprovalRequest {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  companyId         String?            @map("company_id") @db.Uuid
+  gstinId           String?            @map("gstin_id") @db.Uuid
+  branchId          String?            @map("branch_id") @db.Uuid
+  entityType        ApprovalEntityType @map("entity_type")
+  entityId          String             @map("entity_id") @db.VarChar(100)
+  status            ApprovalStatus     @default(SUBMITTED)
+  currentStageIndex Int                @default(0) @map("current_stage_index")
+  requesterUserId   String             @map("requester_user_id") @db.Uuid
+  rejectionReason   String?            @map("rejection_reason") @db.Text
+  comments          String?            @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  tenant  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actions ApprovalActionHistory[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@map("approval_requests")
+}
+
+model ApprovalActionHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  requestId   String   @map("request_id") @db.Uuid
+  stageIndex  Int      @map("stage_index")
+  actorUserId String   @map("actor_user_id") @db.Uuid
+  action      String   @db.VarChar(50)
+  comment     String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, requestId])
+  @@map("approval_action_histories")
+}
+
+model ApprovalDelegation {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenantId        String              @map("tenant_id") @db.Uuid
+  delegatorUserId String              @map("delegator_user_id") @db.Uuid
+  delegateeUserId String              @map("delegatee_user_id") @db.Uuid
+  entityType      ApprovalEntityType? @map("entity_type")
+  startDate       DateTime            @map("start_date")
+  endDate         DateTime            @map("end_date")
+  isActive        Boolean             @default(true) @map("is_active")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, delegatorUserId])
+  @@map("approval_delegations")
+}
+
+model ImmutableAuditLog {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  actorUserId       String?  @map("actor_user_id") @db.Uuid
+  action            String   @db.VarChar(100)
+  entityType        String   @map("entity_type") @db.VarChar(100)
+  entityId          String?  @map("entity_id") @db.VarChar(100)
+  correlationId     String   @map("correlation_id") @db.VarChar(100)
+  ipAddress         String?  @map("ip_address") @db.VarChar(45)
+  beforeState       Json?    @map("before_state") @db.JsonB
+  afterState        Json?    @map("after_state") @db.JsonB
+  result            String   @default("SUCCESS") @db.VarChar(50)
+  reason            String?  @db.Text
+  payloadHash       String   @map("payload_hash") @db.VarChar(64)
+  previousEventHash String   @map("previous_event_hash") @db.VarChar(64)
+  currentEventHash  String   @map("current_event_hash") @db.VarChar(64)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([correlationId])
+  @@map("immutable_audit_logs")
+}
+
+model DocumentMetadata {
+  id               String       @id @default(uuid()) @db.Uuid
+  tenantId         String       @map("tenant_id") @db.Uuid
+  companyId        String?      @map("company_id") @db.Uuid
+  gstinId          String?      @map("gstin_id") @db.Uuid
+  branchId         String?      @map("branch_id") @db.Uuid
+  documentType     DocumentType @map("document_type")
+  entityType       String       @map("entity_type") @db.VarChar(100)
+  entityId         String       @map("entity_id") @db.VarChar(100)
+  fileName         String       @map("file_name") @db.VarChar(255)
+  mimeType         String       @map("mime_type") @db.VarChar(100)
+  sizeBytes        Int          @map("size_bytes")
+  sha256Hash       String       @map("sha256_hash") @db.VarChar(64)
+  objectKey        String       @map("object_key") @db.VarChar(500)
+  version          Int          @default(1)
+  parentDocumentId String?      @map("parent_document_id") @db.Uuid
+  createdById      String       @map("created_by_id") @db.Uuid
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@map("document_metadata")
+}
+
+model NotificationRecord {
+  id             String              @id @default(uuid()) @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  userId         String?             @map("user_id") @db.Uuid
+  channel        NotificationChannel
+  eventType      String              @map("event_type") @db.VarChar(100)
+  recipient      String              @db.VarChar(255)
+  payload        Json                @db.JsonB
+  status         NotificationStatus  @default(PENDING)
+  attempts       Int                 @default(0)
+  lastError      String?             @map("last_error") @db.Text
+  idempotencyKey String              @map("idempotency_key") @db.VarChar(255)
+  correlationId  String              @map("correlation_id") @db.VarChar(100)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt])
+  @@map("notification_records")
+}
+
+// ==========================================
+// Stage 9: ERP & External Integration Platform
+// ==========================================
+
+model ErpIntegration {
+  id                   String              @id @default(uuid()) @db.Uuid
+  tenantId             String              @map("tenant_id") @db.Uuid
+  provider             IntegrationProvider
+  name                 String              @db.VarChar(255)
+  encryptedApiEndpoint String?             @map("encrypted_api_endpoint") @db.Text
+  encryptedCredentials String              @map("encrypted_credentials") @db.Text
+  webhookSecret        String?             @map("webhook_secret") @db.VarChar(255)
+  isActive             Boolean             @default(true) @map("is_active")
+  lastSyncAt           DateTime?           @map("last_sync_at")
+  lastSyncStatus       SyncRunStatus?      @map("last_sync_status")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  tenant               Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mappingConfigs       IntegrationMappingConfig[]
+  syncRuns             SyncRunLog[]
+  importedTransactions ImportedTransactionRecord[]
+  errors               IntegrationErrorLog[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("erp_integrations")
+}
+
+model IntegrationMappingConfig {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  integrationId   String   @map("integration_id") @db.Uuid
+  name            String   @db.VarChar(255)
+  version         Int      @default(1)
+  fieldMappings   Json     @map("field_mappings") @db.JsonB
+  transformations Json?    @db.JsonB
+  isDefault       Boolean  @default(true) @map("is_default")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration ErpIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationId, name, version])
+  @@index([tenantId, integrationId])
+  @@map("integration_mapping_configs")
+}
+
+model SyncRunLog {
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  integrationId   String        @map("integration_id") @db.Uuid
+  status          SyncRunStatus @default(PENDING)
+  sourceSystem    String        @map("source_system") @db.VarChar(100)
+  recordsReceived Int           @default(0) @map("records_received")
+  recordsCreated  Int           @default(0) @map("records_created")
+  recordsUpdated  Int           @default(0) @map("records_updated")
+  recordsSkipped  Int           @default(0) @map("records_skipped")
+  recordsFailed   Int           @default(0) @map("records_failed")
+  startedAt       DateTime      @default(now()) @map("started_at")
+  completedAt     DateTime?     @map("completed_at")
+  durationMs      Int?          @map("duration_ms")
+  correlationId   String        @map("correlation_id") @db.VarChar(100)
+  summary         Json?         @db.JsonB
+
+  tenant               Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration          ErpIntegration             @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  importedTransactions ImportedTransactionRecord[]
+  errors               IntegrationErrorLog[]
+
+  @@index([tenantId, startedAt])
+  @@index([correlationId])
+  @@map("sync_run_logs")
+}
+
+model ImportedTransactionRecord {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  integrationId        String   @map("integration_id") @db.Uuid
+  syncRunId            String?  @map("sync_run_id") @db.Uuid
+  sourceSystem         String   @map("source_system") @db.VarChar(100)
+  externalDocumentId   String   @map("external_document_id") @db.VarChar(100)
+  externalCompanyRef   String?  @map("external_company_ref") @db.VarChar(100)
+  documentType         String   @map("document_type") @db.VarChar(50)
+  documentNumber       String   @map("document_number") @db.VarChar(100)
+  documentDate         DateTime @map("document_date") @db.Date
+  sourcePayloadHash    String   @map("source_payload_hash") @db.VarChar(64)
+  canonicalPayload     Json     @map("canonical_payload") @db.JsonB
+  taxflowInvoiceId     String?  @map("taxflow_invoice_id") @db.Uuid
+  erpCalculatedTax     Decimal  @default(0.0000) @map("erp_calculated_tax") @db.Decimal(16, 4)
+  taxflowCalculatedTax Decimal  @default(0.0000) @map("taxflow_calculated_tax") @db.Decimal(16, 4)
+  taxVariance          Decimal  @default(0.0000) @map("tax_variance") @db.Decimal(16, 4)
+  isTaxMatched         Boolean  @default(true) @map("is_tax_matched")
+  status               String   @default("PROCESSED") @db.VarChar(50)
+  importTimestamp      DateTime @default(now()) @map("import_timestamp")
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration ErpIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  syncRun     SyncRunLog?    @relation(fields: [syncRunId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, integrationId, externalDocumentId, documentType])
+  @@index([tenantId, importTimestamp])
+  @@map("imported_transaction_records")
+}
+
+model IntegrationErrorLog {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  tenantId           String                   @map("tenant_id") @db.Uuid
+  integrationId      String                   @map("integration_id") @db.Uuid
+  syncRunId          String?                  @map("sync_run_id") @db.Uuid
+  externalDocumentId String?                  @map("external_document_id") @db.VarChar(100)
+  category           IntegrationErrorCategory
+  errorCode          String                   @map("error_code") @db.VarChar(100)
+  errorMessage       String                   @map("error_message") @db.Text
+  rawPayload         Json?                    @map("raw_payload") @db.JsonB
+  createdAt          DateTime                 @default(now()) @map("created_at")
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  integration ErpIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  syncRun     SyncRunLog?    @relation(fields: [syncRunId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("integration_error_logs")
+}
+
+// ==========================================
+// Stage 10: Billing, Subscription, Entitlements & Usage
+// ==========================================
+
+model Subscription {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  planCode          String             @default("ENTERPRISE") @map("plan_code") @db.VarChar(50)
+  status            SubscriptionStatus @default(TRIAL)
+  billingCycle      BillingCycle       @default(MONTHLY) @map("billing_cycle")
+  startDate         DateTime           @default(now()) @map("start_date")
+  renewalDate       DateTime           @map("renewal_date")
+  trialEndsAt       DateTime?          @map("trial_ends_at")
+  customLimits      Json?              @map("custom_limits") @db.JsonB
+  customFeatures    Json?              @map("custom_features") @db.JsonB
+  cancelAtPeriodEnd Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  billingEvents BillingEvent[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId])
+  @@map("subscriptions")
+}
+
+model UsageCounterRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  periodKey    String   @map("period_key") @db.VarChar(10)
+  metric       String   @db.VarChar(50)
+  currentValue BigInt   @default(0) @map("current_value")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, periodKey, metric])
+  @@index([tenantId, periodKey])
+  @@map("usage_counter_records")
+}
+
+model UsageEventLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  metric         String   @db.VarChar(50)
+  delta          Int      @default(1)
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(255)
+  entityType     String?  @map("entity_type") @db.VarChar(100)
+  entityId       String?  @map("entity_id") @db.VarChar(100)
+  correlationId  String   @map("correlation_id") @db.VarChar(100)
+  timestamp      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, timestamp])
+  @@map("usage_event_logs")
+}
+
+model BillingEvent {
+  id                String        @id @default(uuid()) @db.Uuid
+  tenantId          String        @map("tenant_id") @db.Uuid
+  subscriptionId    String?       @map("subscription_id") @db.Uuid
+  eventType         String        @map("event_type") @db.VarChar(100)
+  amountInr         Decimal       @default(0.0000) @map("amount_inr") @db.Decimal(16, 4)
+  paymentStatus     PaymentStatus @default(PENDING) @map("payment_status")
+  providerReference String?       @map("provider_reference") @db.VarChar(255)
+  idempotencyKey    String        @map("idempotency_key") @db.VarChar(255)
+  payload           Json?         @db.JsonB
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt])
+  @@map("billing_events")
+}
+
+model BackgroundJobRecord {
+  id             String              @id @default(uuid()) @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  userId         String?             @map("user_id") @db.Uuid
+  domain         JobDomain
+  jobType        String              @map("job_type") @db.VarChar(100)
+  idempotencyKey String              @map("idempotency_key") @db.VarChar(255)
+  status         BackgroundJobStatus @default(QUEUED)
+  attempts       Int                 @default(0)
+  maxAttempts    Int                 @default(3) @map("max_attempts")
+  payload        Json                @db.JsonB
+  result         Json?               @db.JsonB
+  errorMessage   String?             @map("error_message") @db.Text
+  correlationId  String              @map("correlation_id") @db.VarChar(100)
+  lockedAt       DateTime?           @map("locked_at")
+  lockedBy       String?             @map("locked_by") @db.VarChar(100)
+  stalledAt      DateTime?           @map("stalled_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  completedAt    DateTime?           @map("completed_at")
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logs   JobExecutionLog[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@index([domain, status])
+  @@map("background_job_records")
+}
+
+model JobExecutionLog {
+  id              String              @id @default(uuid()) @db.Uuid
+  jobId           String              @map("job_id") @db.Uuid
+  tenantId        String              @map("tenant_id") @db.Uuid
+  attempt         Int
+  status          BackgroundJobStatus
+  executionTimeMs Int                 @default(0) @map("execution_time_ms")
+  logMessage      String              @map("log_message") @db.Text
+  timestamp       DateTime            @default(now())
+
+  job BackgroundJobRecord @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([tenantId, timestamp])
+  @@map("job_execution_logs")
+}
+
+
+
+
+
+

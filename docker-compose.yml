@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: taxflow-postgres
+    environment:
+      POSTGRES_USER: taxflow
+      POSTGRES_PASSWORD: taxflow_dev_secret
+      POSTGRES_DB: taxflow_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taxflow -d taxflow_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: taxflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taxflow-api
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://taxflow:taxflow_dev_secret@postgres:5432/taxflow_db?schema=public"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      JWT_SECRET: "super_secret_jwt_key_development_only"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: taxflow-worker
+    environment:
+      DATABASE_URL: "postgresql://taxflow:taxflow_dev_secret@postgres:5432/taxflow_db?schema=public"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
