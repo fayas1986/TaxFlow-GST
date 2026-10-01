@@ -25,6 +25,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { IntegrationModule } from './modules/integration/integration.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { SecurityModule } from './modules/security/security.module';
 
 @Module({
   imports: [
@@ -53,6 +55,8 @@ import { JobsModule } from './modules/jobs/jobs.module';
     IntegrationModule,
     BillingModule,
     JobsModule,
+    ReportsModule,
+    SecurityModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],

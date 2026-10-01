@@ -276,6 +276,48 @@ enum JobDomain {
   STATUTORY_COMPLIANCE
 }
 
+enum ReportType {
+  SALES_REGISTER
+  PURCHASE_REGISTER
+  TAX_LIABILITY
+  INPUT_TAX_CREDIT
+  HSN_SUMMARY
+  CUSTOMER_SALES
+  VENDOR_PURCHASES
+  INVOICE_AGEING
+  TAX_PERIOD_SUMMARY
+  GSTR1_SUMMARY
+  GSTR3B_SUMMARY
+  GSTR2B_RECONCILIATION
+  ITC_ELIGIBILITY
+  ITC_MISMATCH
+  EINVOICE_STATUS
+  EWAYBILL_STATUS
+  FILING_HISTORY
+  COMPLIANCE_DASHBOARD
+  REVENUE_TRENDS
+  PURCHASE_TRENDS
+  TAX_UTILIZATION
+  RECEIVABLES_PAYABLES
+  BRANCH_PERFORMANCE
+  GSTIN_PERFORMANCE
+}
+
+enum ExportFormat {
+  CSV
+  EXCEL
+  PDF
+  JSON
+}
+
+enum ExportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
 // ==========================================
 // Core Multi-Tenant & Organizational Models
 // ==========================================
@@ -327,6 +369,7 @@ model Tenant {
   usageEvents              UsageEventLog[]
   billingEvents            BillingEvent[]
   backgroundJobs           BackgroundJobRecord[]
+  reportExports            ReportExportRecord[]
 
   @@map("tenants")
 }
@@ -1470,6 +1513,32 @@ model JobExecutionLog {
   @@index([tenantId, timestamp])
   @@map("job_execution_logs")
 }
+
+model ReportExportRecord {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  reportType     ReportType   @map("report_type")
+  format         ExportFormat
+  status         ExportStatus @default(PENDING)
+  filters        Json         @db.JsonB
+  fileKey        String?      @map("file_key") @db.VarChar(550)
+  fileSizeBytes  BigInt       @default(0) @map("file_size_bytes")
+  downloadToken  String?      @unique @map("download_token") @db.VarChar(255)
+  expiresAt      DateTime?    @map("expires_at")
+  idempotencyKey String       @map("idempotency_key") @db.VarChar(255)
+  errorMessage   String?      @map("error_message") @db.Text
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, reportType])
+  @@index([tenantId, createdAt])
+  @@map("report_export_records")
+}
+
 
 
 
