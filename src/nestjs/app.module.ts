@@ -27,6 +27,12 @@ import { BillingModule } from './modules/billing/billing.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SecurityModule } from './modules/security/security.module';
+import { HealthModule } from './modules/health/health.module';
+import { ApiPlatformModule } from './modules/api-platform/api-platform.module';
+import { EventsModule } from './modules/events/events.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { DeveloperPortalModule } from './modules/developer-portal/developer-portal.module';
+import { ERPAdapterFrameworkModule } from './modules/erp-adapter-framework/erp-adapter-framework.module';
 
 @Module({
   imports: [
@@ -57,6 +63,12 @@ import { SecurityModule } from './modules/security/security.module';
     JobsModule,
     ReportsModule,
     SecurityModule,
+    HealthModule,
+    ApiPlatformModule,
+    EventsModule,
+    WebhooksModule,
+    DeveloperPortalModule,
+    ERPAdapterFrameworkModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],
