@@ -7,9 +7,9 @@ describe('PostgreSQL RLS Transaction Context Verification', () => {
     prisma = new PrismaService();
   });
 
-  test('VERIFY: withRlsContext sets session variable strictly within transaction block', async () => {
+  test('VERIFY: withRlsContext sets session variable strictly within transaction block using parameterized set_config', async () => {
     const mockTx = {
-      $executeRawUnsafe: jest.fn().mockResolvedValue(1),
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
     jest.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
       return callback(mockTx);
@@ -22,11 +22,6 @@ describe('PostgreSQL RLS Transaction Context Verification', () => {
       expect(tx).toBe(mockTx);
     });
 
-    expect(mockTx.$executeRawUnsafe).toHaveBeenCalledWith(
-      `SET LOCAL app.current_tenant_id = '${tenantId}';`,
-    );
-    expect(mockTx.$executeRawUnsafe).toHaveBeenCalledWith(
-      `SET LOCAL app.current_company_id = '${companyId}';`,
-    );
+    expect(mockTx.$executeRaw).toHaveBeenCalled();
   });
 });

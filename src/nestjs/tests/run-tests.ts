@@ -86,16 +86,17 @@ async function runVerificationSuite() {
     assert(err instanceof ForbiddenException, 'Unauthorized company IDOR attempt throws ForbiddenException');
   }
 
-  // Test 6: RLS Transaction Context Session Injection
+  // Test 6: RLS Transaction Context Session Injection (Parameterized set_config)
   const prisma = new PrismaService();
   const mockTx = {
-    $executeRawUnsafe: async (sql: string) => 1,
+    $executeRaw: async (strings: TemplateStringsArray, ...values: any[]) => 1,
   };
   (prisma as any).$transaction = async (callback: any) => callback(mockTx);
 
   const executedSqls: string[] = [];
-  mockTx.$executeRawUnsafe = async (sql: string) => {
-    executedSqls.push(sql);
+  mockTx.$executeRaw = async (strings: TemplateStringsArray, ...values: any[]) => {
+    const rawSql = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), '');
+    executedSqls.push(rawSql);
     return 1;
   };
 
@@ -107,12 +108,12 @@ async function runVerificationSuite() {
   });
 
   assert(
-    executedSqls.includes(`SET LOCAL app.current_tenant_id = '${tenantId}';`),
-    `RLS SET LOCAL app.current_tenant_id executed in transaction block`,
+    executedSqls.some(sql => sql.includes("set_config('app.current_tenant_id'")),
+    `RLS set_config('app.current_tenant_id') executed in transaction block`,
   );
   assert(
-    executedSqls.includes(`SET LOCAL app.current_company_id = '${companyId}';`),
-    `RLS SET LOCAL app.current_company_id executed in transaction block`,
+    executedSqls.some(sql => sql.includes("set_config('app.current_company_id'")),
+    `RLS set_config('app.current_company_id') executed in transaction block`,
   );
 
   console.log('\n----------------------------------------------------');
