@@ -1,0 +1,120 @@
+name: TaxFlow-GST Production CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**' ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-and-typecheck:
+    name: 1. Code Quality & Type Safety Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run TypeScript Strict Type Check
+        run: npm run lint
+
+  security-audit:
+    name: 2. Security Vulnerability & Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Dependency Security Audit
+        run: npm audit --audit-level=high
+
+  automated-test-suite:
+    name: 3. Full Stage Automated Test Suite & Regression Baseline
+    runs-on: ubuntu-latest
+    needs: [quality-and-typecheck, security-audit]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: taxflow_user
+          POSTGRES_PASSWORD: taxflow_password
+          POSTGRES_DB: taxflow_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Prisma DB Schema Migrations
+        env:
+          DATABASE_URL: postgresql://taxflow_user:taxflow_password@localhost:5432/taxflow_db?schema=public
+        run: npx prisma migrate deploy
+
+      - name: Execute Full Stage 15 Test Suite (540 Tests)
+        env:
+          DATABASE_URL: postgresql://taxflow_user:taxflow_password@localhost:5432/taxflow_db?schema=public
+          REDIS_URL: redis://localhost:6379
+        run: |
+          npx tsx src/nestjs/tests/stage-15-1-api-foundation.spec.ts
+          npx tsx src/nestjs/tests/stage-15-2-outbox-events.spec.ts
+          npx tsx src/nestjs/tests/stage-15-3-webhook-platform.spec.ts
+          npx tsx src/nestjs/tests/stage-15-4-developer-portal.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-1-integration-adapter-framework.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-2-generic-rest-adapter.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-3-sftp-file-adapter.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-4-dynamics-365-bc.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-5-dynamics-365-fo.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-6-sap.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-7-tally-prime.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-8-zoho-books.spec.ts
+          npx tsx src/nestjs/tests/stage-15-5-9-oracle-fusion.spec.ts
+          npx tsx src/nestjs/tests/stage-15-6-1-connection-lifecycle.spec.ts
+          npx tsx src/nestjs/tests/stage-15-6-2-mapping-management.spec.ts
+          npx tsx src/nestjs/tests/stage-15-6-3-sync-run-checkpoint.spec.ts
+
+  deployment-gate:
+    name: 4. Production Release & Staging Gate
+    runs-on: ubuntu-latest
+    needs: [quality-and-typecheck, security-audit, automated-test-suite]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/stage-15-api-integration-platform'
+    steps:
+      - name: Signal Deployment Approval Gate Passed
+        run: echo "All quality, security, and 540 automated test gates passed cleanly. Ready for deployment."
