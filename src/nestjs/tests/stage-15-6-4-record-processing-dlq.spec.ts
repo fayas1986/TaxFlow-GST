@@ -349,20 +349,34 @@ async function runStage15_6_4_Tests() {
   const crashPayload = {
     externalRecordId: 'INV-CRASH-01',
     entityType: 'INVOICE' as const,
-    data: { total: 4321 },
+    data: { total: 4321, invoiceNumber: 'INV-CRASH-01' },
   };
+  const mockAdapter = registry.getAdapter('GENERIC_REST') as MockErpAdapter;
+  const pushCountBeforeCrashTest = mockAdapter.pushCount;
+
   // Attempt 1: ERP accepts push, but worker crashes before DB save (simulated)
-  const erpAdapter = registry.getAdapter('GENERIC_REST');
-  const erpPushRes = await erpAdapter.push(crashPayload.data);
+  const erpPushRes = await mockAdapter.push({
+    ...crashPayload.data,
+    externalRecordId: crashPayload.externalRecordId,
+    idempotencyKey: `${tenantA}:${connA.id}:${crashPayload.entityType}:${crashPayload.externalRecordId}`,
+    tenantId: tenantA,
+    entityType: crashPayload.entityType,
+    direction: 'OUTBOUND',
+  });
   assert(erpPushRes.success === true, 'ERP accepted initial push request');
+  const pushCountAfterDirectPush = mockAdapter.pushCount;
+  assert(pushCountAfterDirectPush === pushCountBeforeCrashTest + 1, 'Mock ERP recorded direct initial push');
 
   // Recovery: Re-attempt record processing after worker restart
   const recoveryRes = await recordService.processRecord(tenantA, connA.id, crashPayload);
   assert(recoveryRes.status === 'PROCESSED', 'Worker recovery re-attempts record and records success cleanly');
+  assert(mockAdapter.pushCount === pushCountAfterDirectPush + 1, 'Worker recovery calls ERP adapter push to handle duplicate detection');
 
-  // Immediate retry uses persistence idempotency key
+  // Immediate retry uses persistence idempotency key and drops extra ERP side-effects
+  const pushCountBeforeDuplicate = mockAdapter.pushCount;
   const duplicateRecoveryRes = await recordService.processRecord(tenantA, connA.id, crashPayload);
   assert(duplicateRecoveryRes.status === 'DUPLICATE', 'Re-attempt after worker crash recovery drops duplicate side effects');
+  assert(mockAdapter.pushCount === pushCountBeforeDuplicate, 'Persistence idempotency key prevents secondary ERP push (pushCount unchanged)');
 
   // 4. Cross-Tenant Replay Security
   try {

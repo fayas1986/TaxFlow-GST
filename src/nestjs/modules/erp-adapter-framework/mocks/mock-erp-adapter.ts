@@ -23,6 +23,8 @@ export class MockErpAdapter implements IntegrationAdapter {
   public simulateDuplicateRecord: boolean = false;
   public simulatePartialBatchFailure: boolean = false;
 
+  public pushCount: number = 0;
+
   private externalDatabase = new Map<string, CanonicalERPInvoiceDto>();
 
   constructor(
@@ -95,6 +97,7 @@ export class MockErpAdapter implements IntegrationAdapter {
   }
 
   async push(payload: CanonicalERPInvoiceDto): Promise<ERPAdapterSyncResult> {
+    this.pushCount++;
     const correlationId = 'req_mock_' + Math.random().toString(36).substring(7);
 
     if (this.simulateTimeout) {

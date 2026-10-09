@@ -263,6 +263,7 @@ export class IntegrationRecordProcessingService {
       const payload: any = {
         ...(item.data || {}),
         externalRecordId: item.externalRecordId,
+        idempotencyKey,
         tenantId,
         entityType: item.entityType,
         direction: 'OUTBOUND',
