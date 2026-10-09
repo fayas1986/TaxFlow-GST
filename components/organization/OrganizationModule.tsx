@@ -1272,21 +1272,32 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
           {/* Plan Comparison Guide Bar */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { code: PlanCode.STARTER, name: 'Starter SME', price: '₹2,999/mo', desc: 'Invoices, Purchases & GST Returns', color: 'border-amber-200 bg-amber-50/50 text-amber-900' },
-              { code: PlanCode.BUSINESS, name: 'Business Growth', price: '₹6,999/mo', desc: 'Starter + E-Way Bill & ITC Reconcile', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-900' },
-              { code: PlanCode.PROFESSIONAL, name: 'Professional Compliance', price: '₹14,999/mo', desc: 'Business + E-Invoice IRN & Multi-GSTIN', color: 'border-indigo-200 bg-indigo-50/50 text-indigo-900' },
-              { code: PlanCode.ENTERPRISE, name: 'Enterprise Multi-Entity', price: '₹34,999/mo', desc: 'Professional + AI Engine & ERP Sync', color: 'border-purple-200 bg-purple-50/50 text-purple-900' },
-            ].map(p => (
-              <div key={p.code} className={`p-4 rounded-xl border ${p.color} flex flex-col justify-between`}>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs uppercase">{p.name}</span>
-                    <span className="text-[11px] font-mono font-bold">{p.price}</span>
+              { code: PlanCode.STARTER, badge: 'STARTER', color: 'border-sky-200 bg-sky-50/50 text-sky-900', badgeColor: 'bg-sky-100 text-sky-800' },
+              { code: PlanCode.BUSINESS, badge: 'POPULAR', color: 'border-indigo-200 bg-indigo-50/50 text-indigo-900', badgeColor: 'bg-indigo-100 text-indigo-800' },
+              { code: PlanCode.PROFESSIONAL, badge: 'ADVANCED', color: 'border-purple-200 bg-purple-50/50 text-purple-900', badgeColor: 'bg-purple-100 text-purple-800' },
+              { code: PlanCode.ENTERPRISE, badge: 'FULL SUITE', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-900', badgeColor: 'bg-emerald-100 text-emerald-800' },
+            ].map(p => {
+              const plan = plansCatalog.find(item => item.code === p.code) || entitlementService.getPlan(p.code) || DEFAULT_PLANS_CATALOG[p.code];
+              const annualPrice = plan?.annualPriceInr || ((plan?.monthlyPriceInr || 0) * 10);
+              const monthlyEquiv = Math.round(annualPrice / 12);
+              return (
+                <div key={p.code} className={`p-4 rounded-xl border ${p.color} flex flex-col justify-between shadow-2xs`}>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${p.badgeColor}`}>
+                        {p.badge}
+                      </span>
+                      <div className="text-right">
+                        <span className="text-xs font-black text-slate-900 font-mono block">₹{annualPrice.toLocaleString('en-IN')}/yr</span>
+                        <span className="text-[9px] text-slate-500 font-mono font-medium block">(₹{monthlyEquiv.toLocaleString('en-IN')}/mo)</span>
+                      </div>
+                    </div>
+                    <h4 className="font-extrabold text-xs text-slate-900">{plan?.name || p.code}</h4>
+                    <p className="text-[11px] opacity-80 mt-1 line-clamp-1 leading-snug">{plan?.description}</p>
                   </div>
-                  <p className="text-[11px] opacity-80 mt-1">{p.desc}</p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Organizations Grid */}
@@ -1400,11 +1411,11 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
                       onChange={(e) => handleUpgradePlan(t.id, e.target.value as PlanCode)}
                       className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1.5 rounded-lg border border-slate-200 focus:outline-none cursor-pointer"
                     >
-                      <option value={PlanCode.STARTER}>Starter Plan</option>
-                      <option value={PlanCode.BUSINESS}>Business Plan</option>
-                      <option value={PlanCode.PROFESSIONAL}>Professional Plan</option>
-                      <option value={PlanCode.ENTERPRISE}>Enterprise Plan</option>
-                      <option value={PlanCode.ENTERPRISE_PLUS}>Enterprise Plus</option>
+                      <option value={PlanCode.STARTER}>Starter SME Plan</option>
+                      <option value={PlanCode.BUSINESS}>Business Growth Plan</option>
+                      <option value={PlanCode.PROFESSIONAL}>Professional Compliance Plan</option>
+                      <option value={PlanCode.ENTERPRISE}>Enterprise Multi-Entity Plan</option>
+                      <option value={PlanCode.ENTERPRISE_PLUS}>Enterprise Plus Dedicated Plan</option>
                     </select>
 
                     {isCurrent ? (
@@ -2560,41 +2571,41 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
                   {[
                     {
                       code: PlanCode.STARTER,
-                      name: 'Starter SME',
-                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹29,990/yr' : '₹2,999/mo',
-                      badge: 'Basic Tier',
+                      badge: 'STARTER',
                       color: 'border-amber-200 hover:border-amber-400 bg-amber-50/20',
-                      features: ['Invoices & Purchases', 'GSTR-1 & 3B Returns', '1 GSTIN & 1 Branch', 'Up to 5 Users'],
+                      features: ['Invoicing & Purchases', 'GSTR-1 & 3B Filing', 'Tax Rate Calculator', 'Basic Reports'],
                       locked: ['E-Invoice IRN', 'E-Way Bill', 'Multi-GSTIN']
                     },
                     {
                       code: PlanCode.BUSINESS,
-                      name: 'Business Growth',
-                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹69,990/yr' : '₹6,999/mo',
-                      badge: 'Popular',
+                      badge: 'POPULAR',
                       color: 'border-emerald-200 hover:border-emerald-400 bg-emerald-50/20',
-                      features: ['Invoices, Purchases & Returns', 'E-Way Bill Generation', 'GSTR-2B ITC Reconciliation', '2 GSTINs & 5 Branches'],
+                      features: ['E-Way Bill Logistics', 'Auto 2B Reconciliation', 'ITC Optimization', 'Multi-Branch Network'],
                       locked: ['E-Invoice IRN', 'AI Insights']
                     },
                     {
                       code: PlanCode.PROFESSIONAL,
-                      name: 'Professional Compliance',
-                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹1,49,990/yr' : '₹14,999/mo',
-                      badge: 'Recommended',
+                      badge: 'ADVANCED',
                       color: 'border-indigo-200 hover:border-indigo-400 bg-indigo-50/20',
-                      features: ['Everything in Business', 'NIC E-Invoice QR & IRN', 'Multi-GSTIN (5 GSTINs)', 'Auto Filing & Workflows', 'Audit Logging & RBAC'],
+                      features: ['IRP E-Invoicing + QR', 'Multi-GSTIN Consolidation', 'Compliance Automation', 'Granular RBAC'],
                       locked: ['AI Copilot & ERP Sync']
                     },
                     {
                       code: PlanCode.ENTERPRISE,
-                      name: 'Enterprise Multi-Entity',
-                      price: newTenantForm.billingCycle === 'ANNUAL' ? '₹3,49,990/yr' : '₹34,999/mo',
-                      badge: 'Full Suite',
+                      badge: 'FULL SUITE',
                       color: 'border-purple-200 hover:border-purple-400 bg-purple-50/20',
-                      features: ['Complete Tax & GST Suite', 'Gemini AI Assistant', 'ERP / SAP Integration', 'Unlimited Branches & 20 GSTINs', 'Webhooks & Dedicated RLS'],
+                      features: ['AI Risk & Forecasting', 'SAP / Oracle / Tally ERP', 'Regulatory Intelligence', 'REST APIs & Webhooks'],
                       locked: []
                     }
                   ].map((p) => {
+                    const livePlan = plansCatalog.find(item => item.code === p.code) || entitlementService.getPlan(p.code) || DEFAULT_PLANS_CATALOG[p.code];
+                    const annualPrice = livePlan?.annualPriceInr || ((livePlan?.monthlyPriceInr || 0) * 10);
+                    const monthlyPrice = livePlan?.monthlyPriceInr || 0;
+                    const monthlyEquiv = Math.round(annualPrice / 12);
+                    const priceDisplay = newTenantForm.billingCycle === 'ANNUAL'
+                      ? `₹${annualPrice.toLocaleString('en-IN')}/yr (₹${monthlyEquiv.toLocaleString('en-IN')}/mo)`
+                      : `₹${monthlyPrice.toLocaleString('en-IN')}/mo`;
+
                     const isSelected = newTenantForm.planCode === p.code;
                     return (
                       <div
@@ -2608,13 +2619,13 @@ export const OrganizationModule: React.FC<OrganizationModuleProps> = ({
                       >
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="font-bold text-xs text-slate-900">{p.name}</span>
-                            <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                            <span className="font-bold text-xs text-slate-900">{livePlan?.name || p.code}</span>
+                            <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full uppercase">
                               {p.badge}
                             </span>
                           </div>
-                          <div className="text-sm font-extrabold text-slate-900 font-mono mb-2">
-                            {p.price}
+                          <div className="text-xs font-extrabold text-slate-900 font-mono mb-2">
+                            {priceDisplay}
                           </div>
                           <div className="space-y-1">
                             {p.features.map((f, i) => (

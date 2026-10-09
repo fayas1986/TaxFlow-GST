@@ -54,6 +54,8 @@ export const deleteBranch = (payload: { tenantId: string; branchId: string }) =>
   payload,
 });
 
+let isHandlingReducerSync = false;
+
 function syncZustandState(): RootState {
   const authState = useAuthStore.getState();
   const orgState = useOrgStore.getState();
@@ -76,53 +78,58 @@ function rootReducer(state: RootState = syncZustandState(), action: any): RootSt
     const authStore = useAuthStore.getState();
     const orgStore = useOrgStore.getState();
 
-    switch (action.type) {
-      case 'auth/login':
-        authStore.login(action.payload);
-        break;
-      case 'auth/logout':
-        authStore.logout();
-        break;
-      case 'auth/switchRole':
-        authStore.switchRole(action.payload);
-        break;
-      case 'auth/switchUserPersona':
-        authStore.switchUserPersona(action.payload);
-        break;
-      case 'auth/switchTenant':
-        authStore.switchTenant(action.payload);
-        orgStore.resetOrgSelections();
-        break;
-      case 'auth/updateProfile':
-        authStore.updateProfile(action.payload);
-        break;
-      case 'auth/addTenant':
-        authStore.addTenant(action.payload);
-        break;
-      case 'org/setSelectedGstin':
-        orgStore.setSelectedGstin(action.payload);
-        break;
-      case 'org/setSelectedBranch':
-        orgStore.setSelectedBranch(action.payload);
-        break;
-      case 'org/setGstinsForTenant':
-        orgStore.setGstinsForTenant(action.payload.tenantId, action.payload.gstins);
-        break;
-      case 'org/setBranchesForTenant':
-        orgStore.setBranchesForTenant(action.payload.tenantId, action.payload.branches);
-        break;
-      case 'org/addGstinRegistration':
-        orgStore.addGstinRegistration(action.payload.tenantId, action.payload.gstin);
-        break;
-      case 'org/addBranch':
-        orgStore.addBranch(action.payload.tenantId, action.payload.branch);
-        break;
-      case 'org/deleteGstinRegistration':
-        orgStore.deleteGstinRegistration(action.payload.tenantId, action.payload.gstinId);
-        break;
-      case 'org/deleteBranch':
-        orgStore.deleteBranch(action.payload.tenantId, action.payload.branchId);
-        break;
+    isHandlingReducerSync = true;
+    try {
+      switch (action.type) {
+        case 'auth/login':
+          authStore.login(action.payload);
+          break;
+        case 'auth/logout':
+          authStore.logout();
+          break;
+        case 'auth/switchRole':
+          authStore.switchRole(action.payload);
+          break;
+        case 'auth/switchUserPersona':
+          authStore.switchUserPersona(action.payload);
+          break;
+        case 'auth/switchTenant':
+          authStore.switchTenant(action.payload);
+          orgStore.resetOrgSelections();
+          break;
+        case 'auth/updateProfile':
+          authStore.updateProfile(action.payload);
+          break;
+        case 'auth/addTenant':
+          authStore.addTenant(action.payload);
+          break;
+        case 'org/setSelectedGstin':
+          orgStore.setSelectedGstin(action.payload);
+          break;
+        case 'org/setSelectedBranch':
+          orgStore.setSelectedBranch(action.payload);
+          break;
+        case 'org/setGstinsForTenant':
+          orgStore.setGstinsForTenant(action.payload.tenantId, action.payload.gstins);
+          break;
+        case 'org/setBranchesForTenant':
+          orgStore.setBranchesForTenant(action.payload.tenantId, action.payload.branches);
+          break;
+        case 'org/addGstinRegistration':
+          orgStore.addGstinRegistration(action.payload.tenantId, action.payload.gstin);
+          break;
+        case 'org/addBranch':
+          orgStore.addBranch(action.payload.tenantId, action.payload.branch);
+          break;
+        case 'org/deleteGstinRegistration':
+          orgStore.deleteGstinRegistration(action.payload.tenantId, action.payload.gstinId);
+          break;
+        case 'org/deleteBranch':
+          orgStore.deleteBranch(action.payload.tenantId, action.payload.branchId);
+          break;
+      }
+    } finally {
+      isHandlingReducerSync = false;
     }
   }
   return syncZustandState();
@@ -137,10 +144,14 @@ export const store = configureStore({
 });
 
 useAuthStore.subscribe(() => {
-  store.dispatch({ type: '__ZUSTAND_SYNC__' });
+  if (!isHandlingReducerSync) {
+    store.dispatch({ type: '__ZUSTAND_SYNC__' });
+  }
 });
 useOrgStore.subscribe(() => {
-  store.dispatch({ type: '__ZUSTAND_SYNC__' });
+  if (!isHandlingReducerSync) {
+    store.dispatch({ type: '__ZUSTAND_SYNC__' });
+  }
 });
 
 export function useSelector<T>(selector: (state: RootState) => T): T {
