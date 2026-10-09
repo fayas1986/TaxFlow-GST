@@ -5,6 +5,9 @@ import { SsrfGuardService } from '../webhooks/ssrf-guard.service';
 import { AuditService } from '../audit/audit.service';
 import { ERPAdapterRegistryService } from './services/erp-adapter-registry.service';
 import { IntegrationConnectionService } from './services/integration-connection.service';
+import { IntegrationMappingService } from './services/integration-mapping.service';
+import { IntegrationRunService } from './services/integration-run.service';
+import { IntegrationRecordProcessingService } from './services/integration-record-processing.service';
 import { GenericRestAdapter } from './adapters/generic-rest.adapter';
 import { SftpFileAdapter } from './adapters/sftp-file.adapter';
 import { Dynamics365BcAdapter } from './adapters/dynamics-365-bc.adapter';
@@ -22,6 +25,9 @@ import { OracleFusionAdapter } from './adapters/oracle-fusion.adapter';
     AuditService,
     ERPAdapterRegistryService,
     IntegrationConnectionService,
+    IntegrationMappingService,
+    IntegrationRunService,
+    IntegrationRecordProcessingService,
     GenericRestAdapter,
     SftpFileAdapter,
     Dynamics365BcAdapter,
@@ -34,6 +40,9 @@ import { OracleFusionAdapter } from './adapters/oracle-fusion.adapter';
   exports: [
     ERPAdapterRegistryService,
     IntegrationConnectionService,
+    IntegrationMappingService,
+    IntegrationRunService,
+    IntegrationRecordProcessingService,
     GenericRestAdapter,
     SftpFileAdapter,
     Dynamics365BcAdapter,
