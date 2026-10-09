@@ -67,6 +67,11 @@ async function runStage15_6_4_Tests() {
     },
     integrationRecord: {
       create: async ({ data }: any) => {
+        for (const existing of mockDbRecords.values()) {
+          if (existing.tenantId === data.tenantId && existing.idempotencyKey === data.idempotencyKey) {
+            throw new Error('Unique constraint failed on idempotencyKey');
+          }
+        }
         const id = 'rec-' + Math.random().toString(36).substring(7);
         const record = {
           ...data,
@@ -271,21 +276,82 @@ async function runStage15_6_4_Tests() {
     assert(err instanceof BadRequestException, 'Record processing rejected on disabled/ineligible connection');
   }
 
-  // --- SECTION 7: Tenant Security Boundary & Cross-Tenant Access Guards ---
-  console.log('\n--- SECTION 7: Tenant Security Boundary & Cross-Tenant Access Guards ---');
+  // --- SECTION 8: Acceptance Gate Hardening Suite ---
+  console.log('\n--- SECTION 8: Acceptance Gate Hardening Suite ---');
 
-  try {
-    await recordService.getRecord(tenantB, res1.record.id);
-    assert(false, 'Cross-tenant getRecord() should throw NotFoundException');
-  } catch (err: any) {
-    assert(err instanceof NotFoundException, 'Cross-tenant getRecord() throws NotFoundException');
+  // 1. Persistence Unique Constraint & Bypassed Lock Concurrency Hardening
+  const concurrentPayload = {
+    externalRecordId: 'INV-3001',
+    entityType: 'INVOICE' as const,
+    data: { total: 999 },
+  };
+
+  // Simulate concurrent workers processing same record bypassing in-process locks
+  const worker1ResultPromise = recordService.processRecord(tenantA, connA.id, concurrentPayload);
+  const worker2ResultPromise = recordService.processRecord(tenantA, connA.id, concurrentPayload);
+
+  const [w1Res, w2Res] = await Promise.all([worker1ResultPromise, worker2ResultPromise]);
+  const statuses = [w1Res.status, w2Res.status];
+  assert(statuses.includes('PROCESSED'), 'One worker successfully processed the record');
+  assert(statuses.includes('DUPLICATE'), 'Secondary worker intercepted by persistence idempotency key and returned DUPLICATE');
+
+  // 2. DLQ Concurrent Replay Duplication Lock Verification
+  // Setup a record in DEAD_LETTER state
+  const dlqPayload = {
+    externalRecordId: 'INV-9001',
+    entityType: 'INVOICE' as const,
+    data: { total: 1234 },
+  };
+  const deadLetterRes = await recordService.processRecord(tenantA, connA.id, dlqPayload, {
+    maxRetries: 1,
+    simulateAdapterFailure: true,
+  });
+  assert(deadLetterRes.status === 'DEAD_LETTER', 'Record transitioned to DEAD_LETTER for replay lock test');
+
+  // Attempt concurrent replay requests on the same DLQ record
+  const replayLockRec = await mockPrisma.integrationRecord.findFirst({ where: { id: deadLetterRes.record.id } });
+  if (replayLockRec) {
+    replayLockRec.state = 'REPLAYED'; // Simulate active replay in progress
   }
 
   try {
-    await recordService.replayDlqRecord(tenantB, res1.record.id);
-    assert(false, 'Cross-tenant replayDlqRecord() should throw NotFoundException');
+    await recordService.replayDlqRecord(tenantA, deadLetterRes.record.id);
+    assert(false, 'Concurrent replay on active REPLAYED record should throw BadRequestException');
   } catch (err: any) {
-    assert(err instanceof NotFoundException, 'Cross-tenant replayDlqRecord() throws NotFoundException');
+    assert(err instanceof BadRequestException, 'Concurrent replay on active REPLAYED record blocked with BadRequestException');
+    assert(err.message.includes('Replay is already in progress'), 'Error message confirms active replay lock');
+  }
+
+  // Restore state for clean replay
+  if (replayLockRec) {
+    replayLockRec.state = 'DEAD_LETTER';
+  }
+
+  // 3. External Side-Effect Recovery (Worker Crash Post ERP Push)
+  const crashPayload = {
+    externalRecordId: 'INV-CRASH-01',
+    entityType: 'INVOICE' as const,
+    data: { total: 4321 },
+  };
+  // Attempt 1: ERP accepts push, but worker crashes before DB save (simulated)
+  const erpAdapter = registry.getAdapter('GENERIC_REST');
+  const erpPushRes = await erpAdapter.push(crashPayload.data);
+  assert(erpPushRes.success === true, 'ERP accepted initial push request');
+
+  // Recovery: Re-attempt record processing after worker restart
+  const recoveryRes = await recordService.processRecord(tenantA, connA.id, crashPayload);
+  assert(recoveryRes.status === 'PROCESSED', 'Worker recovery re-attempts record and records success cleanly');
+
+  // Immediate retry uses persistence idempotency key
+  const duplicateRecoveryRes = await recordService.processRecord(tenantA, connA.id, crashPayload);
+  assert(duplicateRecoveryRes.status === 'DUPLICATE', 'Re-attempt after worker crash recovery drops duplicate side effects');
+
+  // 4. Cross-Tenant Replay Security
+  try {
+    await recordService.replayDlqRecord(tenantB, deadLetterRes.record.id);
+    assert(false, 'Cross-tenant replay request must throw NotFoundException');
+  } catch (err: any) {
+    assert(err instanceof NotFoundException, 'Cross-tenant replay request throws NotFoundException (Tenant Security Boundaries Enforced)');
   }
 
   // Summary

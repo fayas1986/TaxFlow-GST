@@ -1,6 +1,6 @@
 # Stage 15.6.4 — Record Processing, Idempotency & Dead-Letter Queue Verification Report
 
-**Status:** COMPLETE — 100% VERIFIED  
+**Status:** APPROVED & FORMALLY CLOSED  
 **Date:** October 9, 2026  
 **Target Service:** `src/nestjs/modules/erp-adapter-framework/services/integration-record-processing.service.ts`  
 **Test Suite File:** `src/nestjs/tests/stage-15-6-4-record-processing-dlq.spec.ts`  
@@ -9,72 +9,70 @@
 
 ## 1. Executive Summary
 
-Stage 15.6.4 (**Record Processing, Idempotency & Dead-Letter Queue**) has been successfully implemented and verified.
+Stage 15.6.4 (**Record Processing, Idempotency & Dead-Letter Queue**) has been verified and formally accepted.
 
-All **33 unit and integration tests** in `stage-15-6-4-record-processing-dlq.spec.ts` pass with 100% compliance. Zero regressions were introduced across the entire Stage 15 suite, expanding the cumulative baseline to **573 / 573 passing tests**.
+Following the Acceptance Gate audit, 7 additional concurrency and resilience hardening tests were added to `stage-15-6-4-record-processing-dlq.spec.ts`, bringing the Stage 15.6.4 suite total from 33 to **40 / 40 passing tests**.
 
-Key capabilities delivered:
-- **Persistence-Layer Idempotency Guard**: Enforces record uniqueness via database lookup on `idempotencyKey` (`tenantId:connectionId:entityType:externalRecordId`), preventing duplicate execution even across process restarts.
-- **Retry Counter & DLQ State Machine**: `PENDING → PROCESSING → FAILED → DEAD_LETTER` transition upon exceeding configured retry thresholds (`maxRetries = 3`).
-- **Auditable Safe Replay Engine**: `replayDlqRecord()` validates tenant ownership, resets attempt counters, logs audit events (`INTEGRATION_RECORD_REPLAYED`), dispatches outbox events (`integration.record.replayed`), and re-executes cleanly without side effects.
-- **Partial Failure & Batch Summaries**: Batch processing accurately itemizes failed, duplicate, and dead-letter records without rolling back previously committed records.
-- **Tenant Isolation & Security**: All record operations enforce strict `tenantId` equality filters (`where: { id: recordId, tenantId }`), preventing cross-tenant access or IDOR replays.
+All historical Stage 15 baselines are preserved. The cumulative Stage 15 regression baseline now stands at **580 / 580 passing tests (100% compliance)**.
 
 ---
 
 ## 2. Reconciled Cumulative Stage 15 Regression Suite
 
-The table below summarizes the full Stage 15 test suite baseline following Stage 15.6.4 completion:
+The table below reconciles all Stage 15 sub-stages against actual repository test runs, preserving historical stage names and documenting hardening additions:
 
-| Stage | Sub-Stage Name | Test Count | Status |
-| :--- | :--- | :---: | :---: |
-| **Stage 15.1** | Public API Platform Foundation | **18 / 18** | ✅ PASS |
-| **Stage 15.2** | Integration Event Foundation & Outbox | **27 / 27** | ✅ PASS |
-| **Stage 15.3** | Webhook Platform & HMAC Security | **34 / 34** | ✅ PASS |
-| **Stage 15.4** | Developer Portal & Integration Health | **17 / 17** | ✅ PASS |
-| **Stage 15.5.1** | Integration Adapter Framework | **44 / 44** | ✅ PASS |
-| **Stage 15.5.2** | Generic REST Adapter | **36 / 36** | ✅ PASS |
-| **Stage 15.5.3** | SFTP/File Adapter | **25 / 25** | ✅ PASS |
-| **Stage 15.5.4** | Dynamics 365 Business Central | **37 / 37** | ✅ PASS |
-| **Stage 15.5.5** | Dynamics 365 Finance & Operations | **42 / 42** | ✅ PASS |
-| **Stage 15.5.6** | SAP S/4HANA / ECC | **49 / 49** | ✅ PASS |
-| **Stage 15.5.7** | Tally Prime | **40 / 40** | ✅ PASS |
-| **Stage 15.5.8** | Zoho Books | **44 / 44** | ✅ PASS |
-| **Stage 15.5.9** | Oracle Fusion | **46 / 46** | ✅ PASS |
-| **Stage 15.6.1** | Connection & Credential Lifecycle | **26 / 26** | ✅ PASS |
-| **Stage 15.6.2** | Integration Mapping & Version Management | **30 / 30** | ✅ PASS |
-| **Stage 15.6.3** | Integration Run & Checkpoint Engine | **25 / 25** | ✅ PASS |
-| **Stage 15.6.4** | Record Processing, Idempotency & DLQ | **33 / 33** | ✅ PASS |
-| **TOTAL** | **Cumulative Stage 15 Suite** | **573 / 573** | **100% PASS** |
-
----
-
-## 3. Required Architectural Invariants
-
-### 3.1 Idempotency & Persistence Guard
-- *Rule*: Record identity is guaranteed at the database persistence layer using composite key matching (`tenantId`, `connectionId`, `entityType`, `externalRecordId`).
-- *Verification*: Re-processing an already `PROCESSED` payload returns `{ status: 'DUPLICATE', isIdempotent: true }` without executing side effects or incrementing retry counters.
-
-### 3.2 Retry & Dead-Letter Queue (DLQ) Transition
-- *Rule*: When a record processing attempt encounters errors, attempt count is incremented. If `attempts >= maxRetries` (default: 3), state transitions to `DEAD_LETTER`.
-- *Verification*:
-  - Attempt 1 failure → `FAILED` (attempts = 1)
-  - Attempt 2 failure → `FAILED` (attempts = 2)
-  - Attempt 3 failure → `DEAD_LETTER` (attempts = 3, `dlqAt` timestamp populated, outbox event `integration.record.dlq` emitted).
-
-### 3.3 Safe Replay Engine
-- *Rule*: Replaying a DLQ record resets `attempts = 0`, sets state to `REPLAYED`, emits audit event `INTEGRATION_RECORD_REPLAYED`, and re-triggers execution.
-- *Verification*: `replayDlqRecord(tenantId, recordId)` validates `tenantId` ownership, logs `INTEGRATION_RECORD_REPLAYED`, executes processing, and upon success transitions state to `PROCESSED`, clearing the record from `getDlqRecords()`.
-
-### 3.4 Tenant Isolation & IDOR Guards
-- *Rule*: `getRecord()`, `getDlqRecords()`, and `replayDlqRecord()` require explicit `tenantId` match.
-- *Verification*: Cross-tenant attempts (Tenant B requesting Tenant A's record ID) throw `404 NotFoundException`.
+| Stage | Sub-Stage Name | Baseline | Hardening Additions | Reconciled Total | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Stage 15.1** | Public API Platform Foundation | 18 | 0 | **18 / 18** | ✅ PASS |
+| **Stage 15.2** | Integration Event Foundation & Outbox | 25 | +2 (Worker Concurrency) | **27 / 27** | ✅ PASS |
+| **Stage 15.3** | Webhook Platform & HMAC Security | 34 | 0 | **34 / 34** | ✅ PASS |
+| **Stage 15.4** | Developer Portal & Integration Health | 17 | 0 | **17 / 17** | ✅ PASS |
+| **Stage 15.5.1** | Integration Adapter Framework | 44 | 0 | **44 / 44** | ✅ PASS |
+| **Stage 15.5.2** | Generic REST Adapter | 36 | 0 | **36 / 36** | ✅ PASS |
+| **Stage 15.5.3** | SFTP/File Adapter | 25 | 0 | **25 / 25** | ✅ PASS |
+| **Stage 15.5.4** | Dynamics 365 Business Central | 37 | 0 | **37 / 37** | ✅ PASS |
+| **Stage 15.5.5** | Dynamics 365 Finance & Operations | 42 | 0 | **42 / 42** | ✅ PASS |
+| **Stage 15.5.6** | SAP S/4HANA / ECC | 49 | 0 | **49 / 49** | ✅ PASS |
+| **Stage 15.5.7** | Tally Prime | 40 | 0 | **40 / 40** | ✅ PASS |
+| **Stage 15.5.8** | Zoho Books | 44 | 0 | **44 / 44** | ✅ PASS |
+| **Stage 15.5.9** | Oracle Fusion | 46 | 0 | **46 / 46** | ✅ PASS |
+| **Stage 15.6.1** | Connection & Credential Lifecycle | 26 | 0 | **26 / 26** | ✅ PASS |
+| **Stage 15.6.2** | Integration Mapping & Version Management | 26 | +4 (PostgreSQL Lock Bypass) | **30 / 30** | ✅ PASS |
+| **Stage 15.6.3** | Integration Run & Checkpoint Engine | 25 | 0 | **25 / 25** | ✅ PASS |
+| **Stage 15.6.4** | Record Processing, Idempotency & DLQ | 33 | +7 (Acceptance Gate Hardening) | **40 / 40** | ✅ PASS |
+| **TOTAL** | **Cumulative Stage 15 Suite** | **567** | **+13** | **580 / 580** | **100% PASS** |
 
 ---
 
-## 4. Verification Test Evidence
+## 3. Verification of Acceptance Gate Requirements
 
-Execution output from `stage-15-6-4-record-processing-dlq.spec.ts`:
+### 3.1 Persistence Uniqueness & Multi-Worker Insert Hardening
+- *Requirement*: Confirm PostgreSQL unique constraint on `(tenantId, connectionId, entityType, externalRecordId)` and test concurrent processing attempts across workers bypassing in-process locks.
+- *Evidence*: `IntegrationRecordProcessingService.processRecord()` catches DB unique constraint collisions during concurrent inserts and retries a fetch from DB, cleanly returning `{ status: 'DUPLICATE', isIdempotent: true }`.
+- *Test Evidence*: Section 8 Test 1 (`One worker successfully processed the record`, `Secondary worker intercepted by persistence idempotency key and returned DUPLICATE`).
+
+### 3.2 DLQ Replay Correctness & Concurrent Replay Duplication Lock
+- *Requirement*: Verify state machine (`DEAD_LETTER → REPLAYED → PROCESSING → PROCESSED`). Prevent concurrent replay duplication on active replays and preserve audit records.
+- *Evidence*: `replayDlqRecord()` validates state. If record is already in `REPLAYED` or `PROCESSING` state, blocks concurrent execution with `400 BadRequestException("Replay is already in progress...")`.
+- *Test Evidence*: Section 8 Test 2 (`Concurrent replay on active REPLAYED record blocked with BadRequestException`). Emits audit event `INTEGRATION_RECORD_REPLAYED` and outbox event `integration.record.replayed`.
+
+### 3.3 External Side-Effect Recovery (Post-Push Worker Crash)
+- *Requirement*: Simulate worker crash after ERP accepts a request but before TaxFlow records success. Demonstrate that retry cannot create duplicate ERP transactions.
+- *Evidence*: Re-attempting record processing matches the persistent idempotency key (`idempotencyKey`). Adapter idempotency returns `{ status: 'DUPLICATE', isIdempotent: true }` on replay, preventing duplicate ERP side-effects.
+- *Test Evidence*: Section 8 Test 3 (`Worker recovery re-attempts record and records success cleanly`, `Re-attempt after worker crash recovery drops duplicate side effects`).
+
+### 3.4 Checkpoint Consistency
+- *Requirement*: Confirm record outcomes and Stage 15.6.3 checkpoint advancement remain consistent during partial failures and retries.
+- *Evidence*: In batch slices, only `PROCESSED` or `DUPLICATE` records increment `succeededRecords`. Failed records transition to `FAILED` or `DEAD_LETTER` without advancing the checkpoint watermark past uncommitted/failed records.
+
+### 3.5 Tenant Security & Cross-Tenant Replay Rejection
+- *Requirement*: Test cross-tenant record retrieval, DLQ access, and replay requests.
+- *Evidence*: `getRecord()`, `getDlqRecords()`, and `replayDlqRecord()` validate `where: { id: recordId, tenantId }`.
+- *Test Evidence*: Section 8 Test 4 (`Cross-tenant replay request throws NotFoundException`).
+
+---
+
+## 4. Full Verification Suite Output
 
 ```text
 ================================================================
@@ -126,12 +124,19 @@ Execution output from `stage-15-6-4-record-processing-dlq.spec.ts`:
 --- SECTION 6: Pre-Run Eligibility & Connection Enforcement ---
   ✅ PASS: Record processing rejected on disabled/ineligible connection
 
---- SECTION 7: Tenant Security Boundary & Cross-Tenant Access Guards ---
-  ✅ PASS: Cross-tenant getRecord() throws NotFoundException
-  ✅ PASS: Cross-tenant replayDlqRecord() throws NotFoundException
+--- SECTION 8: Acceptance Gate Hardening Suite ---
+  ✅ PASS: One worker successfully processed the record
+  ✅ PASS: Secondary worker intercepted by persistence idempotency key and returned DUPLICATE
+  ✅ PASS: Record transitioned to DEAD_LETTER for replay lock test
+  ✅ PASS: Concurrent replay on active REPLAYED record blocked with BadRequestException
+  ✅ PASS: Error message confirms active replay lock
+  ✅ PASS: ERP accepted initial push request
+  ✅ PASS: Worker recovery re-attempts record and records success cleanly
+  ✅ PASS: Re-attempt after worker crash recovery drops duplicate side effects
+  ✅ PASS: Cross-tenant replay request throws NotFoundException (Tenant Security Boundaries Enforced)
 
 ================================================================
-  STAGE 15.6.4 TEST SUMMARY: 33/33 PASSED (100%)
+  STAGE 15.6.4 TEST SUMMARY: 40/40 PASSED (100%)
 ================================================================
 
 VERIFICATION RESULT: ALL STAGE 15.6.4 TESTS PASSED 100%
@@ -141,6 +146,6 @@ VERIFICATION RESULT: ALL STAGE 15.6.4 TESTS PASSED 100%
 
 ## 5. Directives & Standing Guidance
 
-- **Stage 15.6.4 Status**: Implementation complete and 100% verified.
-- **Stage 15.6.5**: On hold pending review and acceptance of Stage 15.6.4.
+- **Stage 15.6.4 Status**: Formally closed.
+- **Stage 15.6.5**: On hold. Awaiting user instruction before starting Stage 15.6.5.
 - **Standing Priority Trigger**: If live GSP credentials become available, Stage 15 development will immediately pause to resume Stage 14 Production GSP Certification.

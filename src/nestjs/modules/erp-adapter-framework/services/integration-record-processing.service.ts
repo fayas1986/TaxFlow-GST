@@ -129,12 +129,28 @@ export class IntegrationRecordProcessingService {
       }
     }
 
-    // 2. Initial record creation or loading
+    // 2. Initial record creation or loading with DB unique constraint collision retry lock
     let record: any = existingRecord;
     if (!record) {
-      if ((this.prisma as any).integrationRecord) {
-        record = await (this.prisma as any).integrationRecord.create({
-          data: {
+      try {
+        if ((this.prisma as any).integrationRecord) {
+          record = await (this.prisma as any).integrationRecord.create({
+            data: {
+              tenantId,
+              connectionId,
+              runId: options.runId || null,
+              entityType: item.entityType,
+              externalRecordId: item.externalRecordId,
+              idempotencyKey,
+              state: 'PROCESSING',
+              attempts: 1,
+              payload: item.data,
+              lastAttemptAt: new Date(),
+            },
+          });
+        } else {
+          record = {
+            id: 'rec-' + Math.random().toString(36).substring(7),
             tenantId,
             connectionId,
             runId: options.runId || null,
@@ -145,22 +161,22 @@ export class IntegrationRecordProcessingService {
             attempts: 1,
             payload: item.data,
             lastAttemptAt: new Date(),
-          },
-        });
-      } else {
-        record = {
-          id: 'rec-' + Math.random().toString(36).substring(7),
-          tenantId,
-          connectionId,
-          runId: options.runId || null,
-          entityType: item.entityType,
-          externalRecordId: item.externalRecordId,
-          idempotencyKey,
-          state: 'PROCESSING',
-          attempts: 1,
-          payload: item.data,
-          lastAttemptAt: new Date(),
-        };
+          };
+        }
+      } catch (dbErr: any) {
+        this.logger.warn(`Unique constraint collision for idempotencyKey '${idempotencyKey}', retrying fetch...`);
+        if ((this.prisma as any).integrationRecord) {
+          record = await (this.prisma as any).integrationRecord.findFirst({
+            where: { tenantId, idempotencyKey },
+          });
+        }
+        if (record) {
+          return {
+            status: 'DUPLICATE' as const,
+            isIdempotent: true,
+            record,
+          };
+        }
       }
     } else {
       const newAttempts = record.attempts + 1;
@@ -404,6 +420,10 @@ export class IntegrationRecordProcessingService {
    */
   async replayDlqRecord(tenantId: string, recordId: string) {
     const record = await this.getRecord(tenantId, recordId);
+
+    if (record.state === 'REPLAYED' || record.state === 'PROCESSING') {
+      throw new BadRequestException(`Replay is already in progress for record '${recordId}'. Duplicate concurrent replay blocked.`);
+    }
 
     if (record.state !== 'DEAD_LETTER') {
       throw new BadRequestException(`Cannot replay record '${recordId}' in state '${record.state}'. Record must be in DEAD_LETTER state.`);
