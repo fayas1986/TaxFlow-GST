@@ -130,17 +130,18 @@ export class MockErpAdapter implements IntegrationAdapter {
       );
     }
 
-    if (this.simulateDuplicateRecord || this.externalDatabase.has(payload.invoiceNumber)) {
+    const invKey = payload?.invoiceNumber || payload?.externalRecordId || correlationId;
+    if (this.simulateDuplicateRecord || (invKey && this.externalDatabase.has(invKey))) {
       return {
         success: false,
         status: 'DUPLICATE_RECORD',
         correlationId,
-        error: `Invoice number '${payload.invoiceNumber}' already exists in target ERP`,
+        error: `Invoice number '${invKey}' already exists in target ERP`,
       };
     }
 
     const externalId = 'ext_inv_' + Math.random().toString(36).substring(7);
-    this.externalDatabase.set(payload.invoiceNumber, { ...payload, externalRecordId: externalId });
+    this.externalDatabase.set(invKey, { ...payload, externalRecordId: externalId });
 
     return {
       success: true,

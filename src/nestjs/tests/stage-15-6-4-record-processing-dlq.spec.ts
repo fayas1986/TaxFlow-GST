@@ -116,6 +116,24 @@ async function runStage15_6_4_Tests() {
         }
         return null;
       },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0;
+        for (const [id, rec] of mockDbRecords.entries()) {
+          let isMatch = true;
+          if (where?.id && rec.id !== where.id) isMatch = false;
+          if (where?.tenantId && rec.tenantId !== where.tenantId) isMatch = false;
+          if (where?.attempts !== undefined && rec.attempts !== where.attempts) isMatch = false;
+          if (where?.state) {
+            if (typeof where.state === 'string' && rec.state !== where.state) isMatch = false;
+            if (where.state.in && !where.state.in.includes(rec.state)) isMatch = false;
+          }
+          if (isMatch) {
+            mockDbRecords.set(id, { ...rec, ...data, updatedAt: new Date() });
+            count++;
+          }
+        }
+        return { count };
+      },
     },
     outboxMessage: {
       create: async ({ data }: any) => {

@@ -11,6 +11,7 @@ import { IntegrationConnectionService } from './integration-connection.service';
 import { AuditService } from '../../audit/audit.service';
 import { ERPAdapterRegistryService } from './erp-adapter-registry.service';
 import { ERPEntityType, ERPProviderType } from '../interfaces/erp-adapter.interface';
+import { ERPProviderException } from '../exceptions/erp-provider.exception';
 
 export type RecordProcessingState =
   | 'PENDING'
@@ -177,6 +178,7 @@ export class IntegrationRecordProcessingService {
             record,
           };
         }
+        throw dbErr;
       }
     } else {
       const newAttempts = record.attempts + 1;
@@ -196,14 +198,44 @@ export class IntegrationRecordProcessingService {
       }
 
       if ((this.prisma as any).integrationRecord) {
-        record = await (this.prisma as any).integrationRecord.update({
-          where: { id: record.id },
-          data: {
-            state: 'PROCESSING',
-            attempts: newAttempts,
-            lastAttemptAt: new Date(),
-          },
-        });
+        if ((this.prisma as any).integrationRecord.updateMany) {
+          const claimResult = await (this.prisma as any).integrationRecord.updateMany({
+            where: {
+              id: record.id,
+              attempts: record.attempts,
+              state: { in: ['FAILED', 'REPLAYED', 'PENDING'] },
+            },
+            data: {
+              state: 'PROCESSING',
+              attempts: newAttempts,
+              lastAttemptAt: new Date(),
+            },
+          });
+
+          if (claimResult.count === 0) {
+            const currentRecord = await (this.prisma as any).integrationRecord.findFirst({
+              where: { id: record.id },
+            });
+            return {
+              status: 'DUPLICATE' as const,
+              isIdempotent: true,
+              record: currentRecord || record,
+            };
+          }
+
+          record = await (this.prisma as any).integrationRecord.findFirst({
+            where: { id: record.id },
+          });
+        } else {
+          record = await (this.prisma as any).integrationRecord.update({
+            where: { id: record.id },
+            data: {
+              state: 'PROCESSING',
+              attempts: newAttempts,
+              lastAttemptAt: new Date(),
+            },
+          });
+        }
       } else {
         record.attempts = newAttempts;
         record.state = 'PROCESSING';
@@ -214,10 +246,58 @@ export class IntegrationRecordProcessingService {
     // 3. Execute payload adapter operation
     try {
       if (options.simulateAdapterFailure) {
-        throw new Error(
+        throw new ERPProviderException(
           options.forceErrorType === 'PERMANENT'
             ? 'Permanent Unrecoverable Exception'
             : 'Transient Network Timeout (504 Gateway Timeout)',
+          options.forceErrorType === 'PERMANENT'
+            ? 'Permanent Unrecoverable Exception'
+            : 'Transient Network Timeout (504 Gateway Timeout)',
+          options.forceErrorType === 'PERMANENT' ? 'ERP_PERMANENT_ERROR' : 'ERP_TIMEOUT',
+          options.forceErrorType === 'PERMANENT' ? 400 : 504,
+          options.forceErrorType === 'PERMANENT' ? false : true,
+        );
+      }
+
+      const adapter = this.registry.getAdapter(conn.provider as ERPProviderType);
+      const payload: any = {
+        ...(item.data || {}),
+        externalRecordId: item.externalRecordId,
+        tenantId,
+        entityType: item.entityType,
+        direction: 'OUTBOUND',
+      };
+
+      const pushResult = await adapter.push(payload);
+      if (!pushResult.success) {
+        if (pushResult.status === 'DUPLICATE_RECORD') {
+          this.logger.log(`Adapter reported duplicate record '${item.externalRecordId}' for connection '${connectionId}'. Updating record state to PROCESSED.`);
+          if ((this.prisma as any).integrationRecord) {
+            record = await (this.prisma as any).integrationRecord.update({
+              where: { id: record.id },
+              data: {
+                state: 'PROCESSED',
+                processedAt: new Date(),
+                lastError: null,
+              },
+            });
+          } else {
+            record.state = 'PROCESSED';
+            record.processedAt = new Date();
+            record.lastError = null;
+          }
+          return {
+            status: 'PROCESSED' as const,
+            isIdempotent: true,
+            record,
+          };
+        }
+        throw new ERPProviderException(
+          'ERP Adapter Push Failed',
+          pushResult.error || `Adapter push failed with status ${pushResult.status}`,
+          'ERP_PUSH_FAILED',
+          500,
+          true,
         );
       }
 
@@ -259,10 +339,18 @@ export class IntegrationRecordProcessingService {
         record,
       };
     } catch (err: any) {
-      const errorMessage = err.message || 'Processing failed';
+      const errorMessage =
+        err instanceof ERPProviderException
+          ? err.problemDetails?.detail || err.problemDetails?.title || err.message
+          : err.message || 'Processing failed';
       this.logger.warn(`Record '${item.externalRecordId}' processing failed (Attempt ${record.attempts}/${maxRetries}): ${errorMessage}`);
 
-      if (record.attempts >= maxRetries || options.forceErrorType === 'PERMANENT') {
+      const isRetryable =
+        err instanceof ERPProviderException
+          ? err.problemDetails.isRetryable
+          : options.forceErrorType !== 'PERMANENT';
+
+      if (record.attempts >= maxRetries || !isRetryable || options.forceErrorType === 'PERMANENT') {
         const dlqRecord = await this.transitionToDlq(tenantId, record, errorMessage);
         return {
           status: 'DEAD_LETTER' as const,
@@ -432,15 +520,39 @@ export class IntegrationRecordProcessingService {
     // Reset attempt counter and transition state to REPLAYED -> PROCESSING
     let updatedRecord: any = record;
     if ((this.prisma as any).integrationRecord) {
-      updatedRecord = await (this.prisma as any).integrationRecord.update({
-        where: { id: record.id },
-        data: {
-          state: 'REPLAYED',
-          attempts: 0,
-          lastError: null,
-          replayedAt: new Date(),
-        },
-      });
+      if ((this.prisma as any).integrationRecord.updateMany) {
+        const claimResult = await (this.prisma as any).integrationRecord.updateMany({
+          where: {
+            id: record.id,
+            tenantId,
+            state: 'DEAD_LETTER',
+          },
+          data: {
+            state: 'REPLAYED',
+            attempts: 0,
+            lastError: null,
+            replayedAt: new Date(),
+          },
+        });
+
+        if (claimResult.count === 0) {
+          throw new BadRequestException(`Replay is already in progress for record '${recordId}'. Duplicate concurrent replay blocked.`);
+        }
+
+        updatedRecord = await (this.prisma as any).integrationRecord.findFirst({
+          where: { id: record.id, tenantId },
+        });
+      } else {
+        updatedRecord = await (this.prisma as any).integrationRecord.update({
+          where: { id: record.id },
+          data: {
+            state: 'REPLAYED',
+            attempts: 0,
+            lastError: null,
+            replayedAt: new Date(),
+          },
+        });
+      }
     } else {
       updatedRecord.state = 'REPLAYED';
       updatedRecord.attempts = 0;
